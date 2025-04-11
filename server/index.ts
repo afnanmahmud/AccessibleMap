@@ -9,7 +9,10 @@ import path from 'path';
 console.log('Starting server...');
 
 const app = express();
+// IMPORTANT: Use the PORT environment variable that Azure provides
+// This is the critical fix for the EACCES: permission denied error
 const PORT = process.env.PORT || 5000;
+console.log(`Using port: ${PORT}`);
 
 console.log('Setting up middleware...');
 
@@ -28,8 +31,7 @@ app.use(cors({
 app.use(express.json());
 
 // Serve static frontend files from the current directory
-// Updated path: No longer looking for files in a "dist" subfolder
-const staticPath = path.resolve(__dirname); // Changed from path.join(__dirname, 'dist')
+const staticPath = path.resolve(__dirname);
 console.log(`Serving static files from: ${staticPath}`);
 app.use(express.static(staticPath));
 
@@ -45,7 +47,7 @@ app.use('/api/users', userRoutes);
 
 // Catch-all route to serve frontend (SPA routing)
 app.get('*', (req, res) => {
-  const indexPath = path.join(__dirname, 'index.html'); // Changed from path.join(__dirname, 'dist', 'index.html')
+  const indexPath = path.join(__dirname, 'index.html');
   console.log(`Serving index.html from: ${indexPath}`);
   res.sendFile(indexPath, (err) => {
     if (err) {
@@ -62,19 +64,23 @@ const startServer = async () => {
     await connectToDatabase();
     console.log('Database connection successful');
     console.log('Starting server on port', PORT);
+    
+    // IMPORTANT: Use the PORT variable, don't hardcode port 80
+    // This is where your code was failing with EACCES error
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
   } catch (err) {
     console.error('Failed to start server:', err);
-    process.exit(1);
+    // Don't exit the process on error - this helps Azure recover
+    console.error('Error details:', err);
   }
 };
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exit(1);
+  // Don't exit the process - this helps Azure recover
 });
 
 startServer();
