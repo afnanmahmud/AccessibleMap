@@ -46,12 +46,6 @@ jobs:
         working-directory: ./server
         run: npm run build
 
-      # Copy frontend build output to backend dist folder
-      - name: Copy frontend assets to backend
-        run: |
-          mkdir -p ./server/dist/public
-          cp -r ./dist/* ./server/dist/public/
-
       # Deploy to Azure App Service
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
