@@ -64,11 +64,11 @@ jobs:
         run: |
           cp -r ./dist/* ./server/dist/ || echo "No frontend files to copy"
 
-      # Create schema-compatible app
-      - name: Create schema-compatible app
+      # Create debug SQL app
+      - name: Create debug SQL app
         working-directory: ./server/dist
         run: |
-          cat > schema-app.js << 'EOL'
+          cat > debug-sql-app.js << 'EOL'
           const express = require("express");
           const helmet = require("helmet");
           const compression = require("compression");
@@ -85,7 +85,7 @@ jobs:
           }
           
           // Setup logging
-          const logFile = path.join(logDir, "schema.log");
+          const logFile = path.join(logDir, "sql-debug.log");
           const log = (...args) => {
             const message = args.map(arg => 
               typeof arg === "object" ? util.inspect(arg, { depth: null }) : arg
@@ -110,7 +110,7 @@ jobs:
             log(`UNHANDLED REJECTION: ${reason}`);
           });
           
-          log("Starting schema-compatible app...");
+          log("Starting SQL debugging app...");
           
           const app = express();
           const PORT = process.env.PORT || 8080;
@@ -142,6 +142,7 @@ jobs:
           // Database connection
           let db = null;
           let dbConnected = false;
+          let sql = null; // Store SQL module
           
           // In-memory fallback
           const users = [];
@@ -166,7 +167,7 @@ jobs:
               }
               
               // Require mssql here to avoid dependency issues if not available
-              const sql = require('mssql');
+              sql = require('mssql');
               
               const config = {
                 user: DB_USER,
@@ -195,6 +196,20 @@ jobs:
               }
               
               log("Users table found in database");
+              
+              // Get Users table structure
+              const tableStructure = await pool.request().query(`
+                SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_NAME = 'Users'
+                ORDER BY ORDINAL_POSITION
+              `);
+              
+              log("Users table structure:");
+              tableStructure.recordset.forEach(col => {
+                log(`- ${col.COLUMN_NAME}: ${col.DATA_TYPE}${col.CHARACTER_MAXIMUM_LENGTH ? `(${col.CHARACTER_MAXIMUM_LENGTH})` : ''}`);
+              });
+              
               db = pool;
               dbConnected = true;
               return true;
@@ -218,13 +233,79 @@ jobs:
           app.use((req, res, next) => {
             req.db = db;
             req.dbConnected = dbConnected;
+            req.sql = sql;
             req.users = users;
             next();
           });
           
-          // API Routes
+          // Direct SQL query endpoint for testing
+          app.post('/api/sql-test', async (req, res) => {
+            log('SQL test endpoint hit');
+            
+            if (!req.dbConnected) {
+              return res.status(503).json({
+                success: false,
+                message: 'Database not connected'
+              });
+            }
+            
+            try {
+              const { query, parameters } = req.body;
+              
+              if (!query) {
+                return res.status(400).json({
+                  success: false,
+                  message: 'Query is required'
+                });
+              }
+              
+              log(`Executing SQL query: ${query}`);
+              log(`With parameters: ${util.inspect(parameters || {})}`);
+              
+              // Build the request with parameters
+              const request = req.db.request();
+              
+              if (parameters) {
+                Object.keys(parameters).forEach(key => {
+                  const value = parameters[key];
+                  // Dynamically determine SQL type (basic types only)
+                  if (typeof value === 'number') {
+                    if (Number.isInteger(value)) {
+                      request.input(key, req.sql.Int, value);
+                    } else {
+                      request.input(key, req.sql.Float, value);
+                    }
+                  } else if (typeof value === 'string') {
+                    request.input(key, req.sql.NVarChar, value);
+                  } else if (value instanceof Date) {
+                    request.input(key, req.sql.DateTime, value);
+                  } else if (typeof value === 'boolean') {
+                    request.input(key, req.sql.Bit, value);
+                  } else {
+                    // For null or undefined
+                    request.input(key, req.sql.NVarChar, value);
+                  }
+                });
+              }
+              
+              const result = await request.query(query);
+              return res.json({
+                success: true,
+                message: 'Query executed successfully',
+                recordsets: result.recordsets,
+                rowsAffected: result.rowsAffected
+              });
+            } catch (err) {
+              log(`SQL test error: ${err.message}`);
+              return res.status(500).json({
+                success: false,
+                message: 'SQL query failed',
+                error: err.message
+              });
+            }
+          });
           
-          // Signup endpoint
+          // Signup endpoint with verbose SQL debugging
           app.post('/api/signup', async (req, res) => {
             log('Signup endpoint hit');
             
@@ -268,11 +349,6 @@ jobs:
                 });
               }
               
-              // Extract location data if present
-              const location = body.location || {};
-              const latitude = location.latitude || location.lat;
-              const longitude = location.longitude || location.lng;
-              
               log(`Processing signup: email=${email}, firstName=${firstName}, lastName=${lastName}`);
               
               // Hash password
@@ -285,10 +361,20 @@ jobs:
                 try {
                   log("Checking if user exists in database...");
                   
-                  // Check if user exists
-                  const userCheck = await req.db.request()
-                    .input('email', req.db.VarChar(100), email)
-                    .query('SELECT * FROM Users WHERE email = @email');
+                  // Check query - with trace logging
+                  const checkQuery = 'SELECT * FROM Users WHERE email = @email';
+                  log(`Check query: ${checkQuery}`);
+                  
+                  // Build check request
+                  const checkRequest = req.db.request();
+                  checkRequest.input('email', req.sql.NVarChar(100), email);
+                  
+                  log(`Check parameters: email=${email}`);
+                  
+                  // Execute check
+                  const userCheck = await checkRequest.query(checkQuery);
+                  
+                  log(`Check result: ${util.inspect(userCheck.recordset)}`);
                   
                   if (userCheck.recordset && userCheck.recordset.length > 0) {
                     log(`User with email ${email} already exists`);
@@ -300,31 +386,60 @@ jobs:
                   
                   log("User doesn't exist, creating new user in database...");
                   
-                  // Create new user
-                  const result = await req.db.request()
-                    .input('email', req.db.VarChar(100), email)
-                    .input('password_hash', req.db.VarChar(255), passwordHash)
-                    .input('first_name', req.db.VarChar(100), firstName)
-                    .input('last_name', req.db.VarChar(100), lastName)
-                    .query(`
-                      INSERT INTO Users (email, password_hash, first_name, last_name)
-                      VALUES (@email, @password_hash, @first_name, @last_name);
-                      SELECT SCOPE_IDENTITY() AS user_id;
-                    `);
+                  // Insert query - with trace logging
+                  const insertQuery = `
+                    INSERT INTO Users (email, password_hash, first_name, last_name)
+                    OUTPUT INSERTED.user_id
+                    VALUES (@email, @password_hash, @first_name, @last_name)
+                  `;
+                  log(`Insert query: ${insertQuery}`);
+                  
+                  // Build insert request
+                  const insertRequest = req.db.request();
+                  insertRequest.input('email', req.sql.NVarChar(100), email);
+                  insertRequest.input('password_hash', req.sql.NVarChar(255), passwordHash);
+                  insertRequest.input('first_name', req.sql.NVarChar(100), firstName);
+                  insertRequest.input('last_name', req.sql.NVarChar(100), lastName);
+                  
+                  log(`Insert parameters: email=${email}, password_hash=[REDACTED], first_name=${firstName}, last_name=${lastName}`);
+                  
+                  // Execute insert
+                  const result = await insertRequest.query(insertQuery);
+                  
+                  log(`Insert result: ${util.inspect(result)}`);
+                  
+                  if (!result.recordset || result.recordset.length === 0) {
+                    log('Insert succeeded but no user_id was returned');
+                    
+                    // Try to get the user_id with a separate query
+                    const getUserIdQuery = 'SELECT user_id FROM Users WHERE email = @email';
+                    const getUserIdRequest = req.db.request();
+                    getUserIdRequest.input('email', req.sql.NVarChar(100), email);
+                    
+                    const getUserIdResult = await getUserIdRequest.query(getUserIdQuery);
+                    
+                    if (getUserIdResult.recordset && getUserIdResult.recordset.length > 0) {
+                      const userId = getUserIdResult.recordset[0].user_id;
+                      log(`Retrieved user_id ${userId} in separate query`);
+                      
+                      return res.status(201).json({
+                        success: true,
+                        message: 'User created successfully in database',
+                        user: {
+                          id: userId,
+                          email,
+                          firstName,
+                          lastName
+                        }
+                      });
+                    } else {
+                      log('Could not retrieve user_id even with separate query');
+                      throw new Error('Failed to get user_id after insert');
+                    }
+                  }
                   
                   const userId = result.recordset[0].user_id;
                   log(`User created in database with ID: ${userId}`);
-                  
-                  // If we have location data, we could save it in user preferences table
-                  if (latitude && longitude) {
-                    try {
-                      log(`Saving user location data for user ${userId}`);
-                      // Add code here if you want to store location in a preferences table
-                    } catch (locErr) {
-                      log(`Error saving location data: ${locErr.message}`);
-                      // Non-fatal error, continue
-                    }
-                  }
                   
                   return res.status(201).json({
                     success: true,
@@ -340,6 +455,23 @@ jobs:
                   log(`Database error: ${dbErr.message}`);
                   log(dbErr.stack);
                   
+                  // Get detailed SQL error information if available
+                  if (dbErr.precedingErrors) {
+                    log(`SQL preceding errors: ${util.inspect(dbErr.precedingErrors)}`);
+                  }
+                  
+                  if (dbErr.number) {
+                    log(`SQL error number: ${dbErr.number}`);
+                  }
+                  
+                  if (dbErr.state) {
+                    log(`SQL error state: ${dbErr.state}`);
+                  }
+                  
+                  if (dbErr.code) {
+                    log(`SQL error code: ${dbErr.code}`);
+                  }
+                  
                   // Fall back to in-memory
                   log("Falling back to in-memory storage due to database error");
                 }
@@ -354,8 +486,7 @@ jobs:
                 email,
                 password_hash: passwordHash,
                 first_name: firstName,
-                last_name: lastName,
-                location: { latitude, longitude }
+                last_name: lastName
               });
               
               log(`User created in memory with ID: ${userId}`);
@@ -403,7 +534,7 @@ jobs:
               if (req.dbConnected) {
                 try {
                   const result = await req.db.request()
-                    .input('email', req.db.VarChar(100), email)
+                    .input('email', req.sql.NVarChar(100), email)
                     .query('SELECT * FROM Users WHERE email = @email');
                   
                   if (!result.recordset || result.recordset.length === 0) {
@@ -469,88 +600,150 @@ jobs:
             }
           });
           
-          // List users
-          app.get('/api/users', async (req, res) => {
-            log('List users endpoint hit');
+          // Check table structure
+          app.get('/api/table-check', async (req, res) => {
+            log('Table check endpoint hit');
+            
+            if (!req.dbConnected) {
+              return res.status(503).json({
+                success: false,
+                message: 'Database not connected'
+              });
+            }
             
             try {
-              if (req.dbConnected) {
-                const result = await req.db.request()
-                  .query('SELECT user_id, email, first_name, last_name, registration_date FROM Users');
-                
-                log(`Retrieved ${result.recordset.length} users from database`);
-                return res.json(result.recordset);
-              }
+              // Get all tables
+              const tablesResult = await req.db.request().query(`
+                SELECT TABLE_NAME 
+                FROM INFORMATION_SCHEMA.TABLES 
+                WHERE TABLE_TYPE = 'BASE TABLE'
+              `);
               
-              // In-memory fallback
-              log(`Retrieved ${users.length} users from memory`);
-              return res.json(users.map(({ password_hash, ...user }) => user));
+              const tables = tablesResult.recordset.map(r => r.TABLE_NAME);
+              
+              // Get Users table structure
+              const usersStructureResult = await req.db.request().query(`
+                SELECT 
+                  COLUMN_NAME, 
+                  DATA_TYPE, 
+                  CHARACTER_MAXIMUM_LENGTH,
+                  IS_NULLABLE,
+                  COLUMN_DEFAULT
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_NAME = 'Users'
+                ORDER BY ORDINAL_POSITION
+              `);
+              
+              // Get primary key info
+              const pkResult = await req.db.request().query(`
+                SELECT 
+                  COLUMN_NAME
+                FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS TC
+                INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS KCU
+                  ON TC.CONSTRAINT_TYPE = 'PRIMARY KEY' 
+                  AND TC.CONSTRAINT_NAME = KCU.CONSTRAINT_NAME
+                  AND KCU.TABLE_NAME='Users'
+              `);
+              
+              const primaryKeys = pkResult.recordset.map(r => r.COLUMN_NAME);
+              
+              return res.json({
+                success: true,
+                tables,
+                usersTable: usersStructureResult.recordset,
+                primaryKeys,
+                message: 'Table structure retrieved successfully'
+              });
             } catch (err) {
-              log(`Error listing users: ${err.message}`);
+              log(`Table check error: ${err.message}`);
               return res.status(500).json({
                 success: false,
-                message: 'Server error when retrieving users',
+                message: 'Error checking table structure',
                 error: err.message
               });
             }
           });
           
-          // Get user by ID
-          app.get('/api/users/:id', async (req, res) => {
-            const userId = parseInt(req.params.id);
-            log(`Get user endpoint hit for ID: ${userId}`);
+          // Test direct user insertion
+          app.get('/api/test-insert', async (req, res) => {
+            log('Test insert endpoint hit');
+            
+            if (!req.dbConnected) {
+              return res.status(503).json({
+                success: false,
+                message: 'Database not connected'
+              });
+            }
             
             try {
-              if (req.dbConnected) {
-                const result = await req.db.request()
-                  .input('user_id', req.db.Int, userId)
-                  .query('SELECT user_id, email, first_name, last_name, registration_date FROM Users WHERE user_id = @user_id');
-                
-                if (!result.recordset || result.recordset.length === 0) {
-                  return res.status(404).json({
-                    success: false,
-                    message: 'User not found'
-                  });
-                }
-                
-                return res.json(result.recordset[0]);
-              }
+              // Generate a unique test email
+              const testEmail = `test_${Date.now()}@example.com`;
               
-              // In-memory fallback
-              const user = users.find(u => u.user_id === userId);
+              // Try simpler insert query
+              log('Trying direct insert query...');
               
-              if (!user) {
-                return res.status(404).json({
+              // Create insert query
+              const insertQuery = `
+                INSERT INTO Users (email, password_hash, first_name, last_name)
+                VALUES (@email, @password, @firstName, @lastName);
+                
+                SELECT SCOPE_IDENTITY() AS user_id;
+              `;
+              
+              // Setup request
+              const request = req.db.request();
+              request.input('email', req.sql.NVarChar(100), testEmail);
+              request.input('password', req.sql.NVarChar(255), 'test_password_hash');
+              request.input('firstName', req.sql.NVarChar(100), 'Test');
+              request.input('lastName', req.sql.NVarChar(100), 'User');
+              
+              // Execute query
+              const result = await request.query(insertQuery);
+              
+              log(`Insert result: ${util.inspect(result)}`);
+              
+              // Check if user was created
+              const userId = result.recordset[0].user_id;
+              
+              if (!userId) {
+                return res.status(500).json({
                   success: false,
-                  message: 'User not found'
+                  message: 'User insert failed - no ID returned',
+                  result
                 });
               }
               
-              const { password_hash, ...userData } = user;
-              return res.json(userData);
+              // Verify user was created
+              const verifyQuery = `
+                SELECT * FROM Users WHERE user_id = @userId
+              `;
+              
+              const verifyRequest = req.db.request();
+              verifyRequest.input('userId', req.sql.Int, userId);
+              
+              const verifyResult = await verifyRequest.query(verifyQuery);
+              
+              if (!verifyResult.recordset || verifyResult.recordset.length === 0) {
+                return res.status(500).json({
+                  success: false,
+                  message: 'User not found after insert',
+                  userId
+                });
+              }
+              
+              return res.json({
+                success: true,
+                message: 'Test user insertion successful',
+                user: verifyResult.recordset[0]
+              });
             } catch (err) {
-              log(`Error retrieving user: ${err.message}`);
+              log(`Test insert error: ${err.message}`);
               return res.status(500).json({
                 success: false,
-                message: 'Server error when retrieving user',
+                message: 'Error during test insert',
                 error: err.message
               });
             }
-          });
-          
-          // Add geolocation fallback API
-          app.get('/api/geolocation', (req, res) => {
-            log('Geolocation fallback API hit');
-            // Return a default location (New York City)
-            res.json({
-              status: 'success',
-              location: {
-                latitude: 40.7128,
-                longitude: -74.0060,
-                accuracy: 1000,
-                source: 'mock'
-              }
-            });
           });
           
           // Health check endpoint
@@ -592,48 +785,6 @@ jobs:
             }
           });
           
-          // Database test endpoint
-          app.get('/api/db-test', async (req, res) => {
-            log('Database test endpoint hit');
-            
-            try {
-              if (!dbConnected) {
-                return res.status(503).json({
-                  success: false,
-                  message: 'Database not connected',
-                  connectionParams: {
-                    host: process.env.DB_HOST || 'not set',
-                    user: process.env.DB_USER || 'not set',
-                    database: process.env.DB_NAME || 'not set',
-                    password: process.env.DB_PASS ? 'set (redacted)' : 'not set'
-                  }
-                });
-              }
-              
-              // Test queries
-              const versionResult = await db.request().query('SELECT @@VERSION as version');
-              const tableResult = await db.request().query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'");
-              
-              // Get list of tables
-              const tables = tableResult.recordset.map(record => record.TABLE_NAME);
-              
-              return res.json({
-                success: true,
-                message: 'Database connection successful',
-                version: versionResult.recordset[0].version,
-                tables: tables,
-                timestamp: new Date().toISOString()
-              });
-            } catch (err) {
-              log(`Database test error: ${err.message}`);
-              return res.status(500).json({
-                success: false,
-                message: 'Database test failed',
-                error: err.message
-              });
-            }
-          });
-          
           // Serve static files
           app.use(express.static(path.resolve(__dirname)));
           
@@ -655,12 +806,12 @@ jobs:
           
           // Start server
           app.listen(PORT, () => {
-            log(`Schema-compatible app running on port ${PORT}`);
+            log(`SQL debugging app running on port ${PORT}`);
           });
           EOL
           
           # Update package.json
-          node -e "const pkg = require('./package.json'); pkg.main = 'schema-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node schema-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
+          node -e "const pkg = require('./package.json'); pkg.main = 'debug-sql-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node debug-sql-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
 
       # Create web.config for Azure
       - name: Create web.config for Azure
@@ -671,17 +822,17 @@ jobs:
           <configuration>
             <system.webServer>
               <handlers>
-                <add name="iisnode" path="schema-app.js" verb="*" modules="iisnode" />
+                <add name="iisnode" path="debug-sql-app.js" verb="*" modules="iisnode" />
               </handlers>
               <rewrite>
                 <rules>
                   <rule name="API">
                     <match url="api/*" />
-                    <action type="Rewrite" url="schema-app.js" />
+                    <action type="Rewrite" url="debug-sql-app.js" />
                   </rule>
                   <rule name="Health">
                     <match url="health" />
-                    <action type="Rewrite" url="schema-app.js" />
+                    <action type="Rewrite" url="debug-sql-app.js" />
                   </rule>
                   <rule name="StaticContent">
                     <match url="(.*)" />
@@ -695,7 +846,7 @@ jobs:
                     <conditions>
                       <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
                     </conditions>
-                    <action type="Rewrite" url="schema-app.js" />
+                    <action type="Rewrite" url="debug-sql-app.js" />
                   </rule>
                 </rules>
               </rewrite>
