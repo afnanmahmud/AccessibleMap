@@ -2,7 +2,6 @@
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
 name: Build and deploy Node.js app to Azure Web App - accessiblemap
-
 on:
   push:
     branches:
@@ -10,69 +9,95 @@ on:
   pull_request:
     branches:
       - main
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
       # Checkout the repository
       - name: Checkout GitHub repository
         uses: actions/checkout@v4
-
       # Set up Node.js environment
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-
       # Install frontend dependencies
       - name: Install frontend dependencies
         run: npm ci
-
       # Install backend dependencies
       - name: Install backend dependencies
         working-directory: ./server
         run: npm ci
-
       # Build the frontend
       - name: Build the frontend
         run: npm run build:frontend
         env:
           VITE_OPENROUTE_API_KEY: ${{ secrets.VITE_OPENROUTE_API_KEY }}
-
-      # Log contents of root dist (frontend build output)
-      - name: Log root dist contents
-        run: ls -R ./dist || echo "root dist does not exist"
-
       # Build the backend
       - name: Build the backend
         working-directory: ./server
         run: npm run build
-
-      # Log contents of server/dist for debugging
-      - name: Log server/dist contents
-        run: ls -R ./server/dist || echo "server/dist does not exist"
-
       # Copy server package.json for dependency installation
       - name: Copy server package.json
         run: cp ./server/package.json ./server/dist/
-
+      # Modify package.json for Azure
+      - name: Modify package.json for Azure
+        working-directory: ./server/dist
+        run: |
+          node -e "const pkg = require('./package.json'); pkg.main = 'index.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node index.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
       # Install dependencies in server/dist
       - name: Install dependencies in server/dist
         working-directory: ./server/dist
         run: npm install --production
-
-      # Copy frontend dist folder to the correct location
-      - name: Copy frontend dist folder
+      # Copy frontend files directly to server/dist (no longer to server/dist/dist)
+      - name: Copy frontend files
         run: |
-          mkdir -p ./server/dist/dist
-          cp -r ./dist/* ./server/dist/dist/ || echo "Failed to copy frontend dist"
-
-      # Log contents of server/dist after copying frontend dist
-      - name: Log server/dist contents after copy
-        run: ls -R ./server/dist
-
+          # Copy all frontend files to server/dist
+          cp -r ./dist/* ./server/dist/
+      # Create web.config for Azure
+      - name: Create web.config for Azure
+        working-directory: ./server/dist
+        run: |
+          echo '<?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <system.webServer>
+              <handlers>
+                <add name="iisnode" path="index.js" verb="*" modules="iisnode" />
+              </handlers>
+              <rewrite>
+                <rules>
+                  <rule name="API">
+                    <match url="api/*" />
+                    <action type="Rewrite" url="index.js" />
+                  </rule>
+                  <rule name="Health">
+                    <match url="health" />
+                    <action type="Rewrite" url="index.js" />
+                  </rule>
+                  <rule name="StaticContent">
+                    <match url="(.*)" />
+                    <conditions>
+                      <add input="{REQUEST_FILENAME}" matchType="IsFile" />
+                    </conditions>
+                    <action type="None" />
+                  </rule>
+                  <rule name="DynamicContent">
+                    <match url=".*" />
+                    <conditions>
+                      <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
+                    </conditions>
+                    <action type="Rewrite" url="index.js" />
+                  </rule>
+                </rules>
+              </rewrite>
+              <iisnode watchedFiles="web.config;*.js" node_env="production" />
+            </system.webServer>
+          </configuration>' > web.config
+      # Log final deployment package contents
+      - name: Log deployment package contents
+        run: |
+          echo "Deployment package contents:"
+          ls -la ./server/dist/
       # Deploy to Azure App Service
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
