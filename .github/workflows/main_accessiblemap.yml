@@ -46,6 +46,20 @@ jobs:
         working-directory: ./server
         run: npm run build
 
+      # Log contents of server/dist for debugging
+      - name: Log server/dist contents
+        run: ls -R ./server/dist
+
+      # Copy frontend dist folder to the correct location
+      - name: Copy frontend dist folder
+        run: |
+          mkdir -p ./server/dist/dist
+          cp -r ./dist/* ./server/dist/dist/
+
+      # Log contents of server/dist after copying frontend dist
+      - name: Log server/dist contents after copy
+        run: ls -R ./server/dist
+
       # Deploy to Azure App Service
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
