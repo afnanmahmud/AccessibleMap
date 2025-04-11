@@ -16,30 +16,37 @@ jobs:
       # Checkout the repository
       - name: Checkout GitHub repository
         uses: actions/checkout@v4
+
       # Set up Node.js environment
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+
       # Install frontend dependencies
       - name: Install frontend dependencies
         run: npm ci
+
       # Install backend dependencies
       - name: Install backend dependencies
         working-directory: ./server
         run: npm ci
+
       # Build the frontend
       - name: Build the frontend
         run: npm run build:frontend
         env:
           VITE_OPENROUTE_API_KEY: ${{ secrets.VITE_OPENROUTE_API_KEY }}
+
       # Build the backend
       - name: Build the backend
         working-directory: ./server
         run: npm run build
+
       # Copy server package.json for dependency installation
       - name: Copy server package.json
         run: cp ./server/package.json ./server/dist/
+
       # Remove type:module from package.json if present
       - name: Check if package.json has type:module
         working-directory: ./server/dist
@@ -48,90 +55,137 @@ jobs:
             echo "Removing type:module from package.json"
             node -e "const pkg = require('./package.json'); delete pkg.type; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
           fi
-      # Create port check wrapper
-      - name: Create port check wrapper
-        working-directory: ./server/dist
-        run: |
-          echo 'try {
-            // Ensure the app uses the PORT provided by Azure
-            console.log("Starting application with enhanced error handling");
-            process.on("uncaughtException", (err) => {
-              console.error("UNCAUGHT EXCEPTION:", err);
-              console.error(err.stack);
-            });
-            
-            // Make sure we use the port Azure provides
-            if (!process.env.PORT) {
-              console.log("No PORT environment variable found, defaulting to 8080");
-              process.env.PORT = "8080";
-            }
-            
-            console.log(`Using PORT: ${process.env.PORT}`);
-            
-            // Load the application
-            require("./index.js");
-          } catch (err) {
-            console.error("STARTUP ERROR:", err);
-            console.error(err.stack);
-          }' > server.js
-      # Modify package.json for Azure
-      - name: Modify package.json for Azure
-        working-directory: ./server/dist
-        run: |
-          node -e "const pkg = require('./package.json'); pkg.main = 'server.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node server.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
+
       # Install dependencies in server/dist
       - name: Install dependencies in server/dist
         working-directory: ./server/dist
         run: npm install --production
+
       # Copy frontend files directly to server/dist
       - name: Copy frontend files
         run: |
-          cp -r ./dist/* ./server/dist/
-      # Create web.config for Azure
-      - name: Create web.config for Azure
+          cp -r ./dist/* ./server/dist/ || echo "No frontend files to copy"
+
+      # Create minimal test app for diagnostics
+      - name: Create minimal test app
+        working-directory: ./server/dist
+        run: |
+          # Create a bare-minimum Express app
+          echo 'const express = require("express");
+          const app = express();
+          const fs = require("fs");
+          const path = require("path");
+          const PORT = process.env.PORT || 8080;
+          
+          console.log("Starting minimal test app");
+          console.log("Current directory:", __dirname);
+          console.log("Files in directory:", fs.readdirSync(__dirname));
+          
+          // Create a diagnostic log file
+          fs.writeFileSync(path.join(__dirname, "startup.log"), "App started at " + new Date().toISOString() + "\n");
+          
+          // Add routes
+          app.get("/", (req, res) => {
+            console.log("Root endpoint hit");
+            fs.appendFileSync(path.join(__dirname, "startup.log"), "Root endpoint hit at " + new Date().toISOString() + "\n");
+            res.send("Hello from minimal test app");
+          });
+          
+          app.get("/health", (req, res) => {
+            console.log("Health endpoint hit");
+            fs.appendFileSync(path.join(__dirname, "startup.log"), "Health endpoint hit at " + new Date().toISOString() + "\n");
+            res.json({ status: "OK" });
+          });
+          
+          // Add a diagnostic endpoint
+          app.get("/diagnostic", (req, res) => {
+            console.log("Diagnostic endpoint hit");
+            const diagnosticInfo = {
+              nodeVersion: process.version,
+              env: Object.keys(process.env).reduce((result, key) => {
+                // Filter out sensitive environment variables
+                if (!key.includes("KEY") && !key.includes("SECRET") && !key.includes("PASSWORD")) {
+                  result[key] = process.env[key];
+                }
+                return result;
+              }, {}),
+              cwd: process.cwd(),
+              dirname: __dirname,
+              files: fs.readdirSync(__dirname),
+              timestamp: new Date().toISOString()
+            };
+            
+            try {
+              fs.writeFileSync(path.join(__dirname, "runtime-diagnostic.txt"), JSON.stringify(diagnosticInfo, null, 2));
+              diagnosticInfo.fileWriteSuccess = true;
+            } catch (err) {
+              diagnosticInfo.fileWriteSuccess = false;
+              diagnosticInfo.writeError = err.message;
+            }
+            
+            fs.appendFileSync(path.join(__dirname, "startup.log"), "Diagnostic endpoint hit at " + new Date().toISOString() + "\n");
+            res.json(diagnosticInfo);
+          });
+          
+          // Serve static files if they exist
+          const staticPath = path.join(__dirname);
+          console.log("Serving static files from:", staticPath);
+          app.use(express.static(staticPath));
+          
+          // Start the server
+          app.listen(PORT, () => {
+            console.log(`Minimal test app running on port ${PORT}`);
+            fs.appendFileSync(path.join(__dirname, "startup.log"), "Server started on port " + PORT + " at " + new Date().toISOString() + "\n");
+          });' > minimal-app.js
+          
+          # Update package.json
+          node -e "const pkg = require('./package.json'); pkg.main = 'minimal-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node minimal-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
+
+      # Create simplified web.config for test app
+      - name: Create simplified web.config
         working-directory: ./server/dist
         run: |
           echo '<?xml version="1.0" encoding="utf-8"?>
           <configuration>
             <system.webServer>
               <handlers>
-                <add name="iisnode" path="server.js" verb="*" modules="iisnode" />
+                <add name="iisnode" path="minimal-app.js" verb="*" modules="iisnode" />
               </handlers>
               <rewrite>
                 <rules>
-                  <rule name="API">
-                    <match url="api/*" />
-                    <action type="Rewrite" url="server.js" />
-                  </rule>
-                  <rule name="Health">
-                    <match url="health" />
-                    <action type="Rewrite" url="server.js" />
-                  </rule>
-                  <rule name="StaticContent">
-                    <match url="(.*)" />
-                    <conditions>
-                      <add input="{REQUEST_FILENAME}" matchType="IsFile" />
-                    </conditions>
-                    <action type="None" />
-                  </rule>
-                  <rule name="DynamicContent">
+                  <rule name="All Requests">
                     <match url=".*" />
                     <conditions>
                       <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
                     </conditions>
-                    <action type="Rewrite" url="server.js" />
+                    <action type="Rewrite" url="minimal-app.js" />
                   </rule>
                 </rules>
               </rewrite>
-              <iisnode watchedFiles="web.config;*.js" node_env="production" loggingEnabled="true" />
-              <env key="PORT" value="8080" />
+              <iisnode 
+                nodeProcessCommandLine="node"
+                watchedFiles="web.config;*.js"
+                loggingEnabled="true"
+                logDirectory="iisnode" 
+                debuggingEnabled="true" />
             </system.webServer>
           </configuration>' > web.config
+
+      # Create diagnostic test file
+      - name: Create diagnostic test file
+        working-directory: ./server/dist
+        run: |
+          echo "Diagnostic test file created at deploy time: $(date)" > diagnostic-test.txt
+          echo "Node version during deployment: $(node -v)" >> diagnostic-test.txt
+          echo "Files in directory during deployment:" >> diagnostic-test.txt
+          ls -la >> diagnostic-test.txt
+
       # Log deployment package contents
       - name: Log deployment package contents
         run: |
           echo "Deployment package contents:"
           ls -la ./server/dist/
+
       # Deploy to Azure App Service
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
