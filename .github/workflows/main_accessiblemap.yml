@@ -1,6 +1,4 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-
 name: Build and deploy Node.js app to Azure Web App - accessiblemap
 on:
   push:
@@ -40,19 +38,31 @@ jobs:
       # Copy server package.json for dependency installation
       - name: Copy server package.json
         run: cp ./server/package.json ./server/dist/
+      # Remove type:module from package.json if present
+      - name: Check if package.json has type:module
+        working-directory: ./server/dist
+        run: |
+          if grep -q '"type"\s*:\s*"module"' package.json; then
+            echo "Removing type:module from package.json"
+            node -e "const pkg = require('./package.json'); delete pkg.type; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
+          fi
+      # Create CommonJS wrapper
+      - name: Create CommonJS wrapper
+        working-directory: ./server/dist
+        run: |
+          echo 'const server = require("./index.js");' > server.cjs
       # Modify package.json for Azure
       - name: Modify package.json for Azure
         working-directory: ./server/dist
         run: |
-          node -e "const pkg = require('./package.json'); pkg.main = 'index.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node index.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
+          node -e "const pkg = require('./package.json'); pkg.main = 'server.cjs'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node server.cjs'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
       # Install dependencies in server/dist
       - name: Install dependencies in server/dist
         working-directory: ./server/dist
         run: npm install --production
-      # Copy frontend files directly to server/dist (no longer to server/dist/dist)
+      # Copy frontend files directly to server/dist
       - name: Copy frontend files
         run: |
-          # Copy all frontend files to server/dist
           cp -r ./dist/* ./server/dist/
       # Create web.config for Azure
       - name: Create web.config for Azure
@@ -62,17 +72,17 @@ jobs:
           <configuration>
             <system.webServer>
               <handlers>
-                <add name="iisnode" path="index.js" verb="*" modules="iisnode" />
+                <add name="iisnode" path="server.cjs" verb="*" modules="iisnode" />
               </handlers>
               <rewrite>
                 <rules>
                   <rule name="API">
                     <match url="api/*" />
-                    <action type="Rewrite" url="index.js" />
+                    <action type="Rewrite" url="server.cjs" />
                   </rule>
                   <rule name="Health">
                     <match url="health" />
-                    <action type="Rewrite" url="index.js" />
+                    <action type="Rewrite" url="server.cjs" />
                   </rule>
                   <rule name="StaticContent">
                     <match url="(.*)" />
@@ -86,14 +96,14 @@ jobs:
                     <conditions>
                       <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
                     </conditions>
-                    <action type="Rewrite" url="index.js" />
+                    <action type="Rewrite" url="server.cjs" />
                   </rule>
                 </rules>
               </rewrite>
               <iisnode watchedFiles="web.config;*.js" node_env="production" />
             </system.webServer>
           </configuration>' > web.config
-      # Log final deployment package contents
+      # Log deployment package contents
       - name: Log deployment package contents
         run: |
           echo "Deployment package contents:"
