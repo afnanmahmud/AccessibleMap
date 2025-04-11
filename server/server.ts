@@ -31,7 +31,7 @@ app.use('/api/users', userRoutes);
 
 // Catch-all route to serve frontend (SPA routing)
 app.get('*', (req, res) => {
-  res.sendFile('index.html', { root: '../../dist' });
+  res.sendFile('index.html', { root: '../dist' });
 });
 
 // Start the server
