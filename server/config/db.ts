@@ -1,6 +1,6 @@
-import sql from 'mssql';
+import { ConnectionPool } from 'mssql';
 
-// Helper function to validate environment variables
+// Utility function to ensure an environment variable is a string
 const getEnvVariable = (name: string): string => {
   const value = process.env[name];
   if (!value) {
@@ -9,27 +9,32 @@ const getEnvVariable = (name: string): string => {
   return value;
 };
 
-// Define the dbConfig using validated environment variables
-const dbConfig: sql.config = {
-  user: getEnvVariable('SQL_USER'),
-  password: getEnvVariable('SQL_PASSWORD'),
-  server: getEnvVariable('SQL_SERVER'), // Now guaranteed to be a string
-  database: getEnvVariable('SQL_DATABASE'),
-  options: {
-    encrypt: true, // Required for Azure SQL
-    trustServerCertificate: false // Enforce certificate validation
-  },
-  pool: {
-    max: 10, // Maximum number of connections in pool
-    min: 0,
-    idleTimeoutMillis: 30000 // Close idle connections after 30 seconds
-  }
-};
-
 export const connectToDatabase = async () => {
+  console.log('Starting database connection...');
+  console.log('DB_HOST:', process.env.DB_HOST);
+  console.log('DB_USER:', process.env.DB_USER);
+  console.log('DB_NAME:', process.env.DB_NAME);
+
+  // Validate and retrieve environment variables
+  const dbUser = getEnvVariable('DB_USER');
+  const dbPass = getEnvVariable('DB_PASS');
+  const dbHost = getEnvVariable('DB_HOST');
+  const dbName = getEnvVariable('DB_NAME');
+
   try {
-    const pool = await sql.connect(dbConfig);
-    console.log('Connected to Azure SQL Database');
+    const pool = new ConnectionPool({
+      user: dbUser,
+      password: dbPass,
+      server: dbHost,
+      database: dbName,
+      options: {
+        encrypt: true,
+        trustServerCertificate: true
+      }
+    });
+    console.log('Connecting to database...');
+    await pool.connect();
+    console.log('Connected!');
     return pool;
   } catch (err) {
     console.error('Database connection failed:', err);
