@@ -11,6 +11,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: false // Disable sourcemaps in production for security
+    sourcemap: false, // Disable sourcemaps in production for security
+    chunkSizeWarningLimit: 600, // Increase the limit to 600 kB
   }
 });
