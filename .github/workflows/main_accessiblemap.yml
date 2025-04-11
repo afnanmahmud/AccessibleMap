@@ -68,8 +68,8 @@ jobs:
       - name: Create robust app with DB connection
         working-directory: ./server/dist
         run: |
-          # Create a wrapper server with robust DB connection
-          echo 'const express = require("express");
+          cat > robust-app.js << 'EOL'
+          const express = require("express");
           const helmet = require("helmet");
           const compression = require("compression");
           const cors = require("cors");
@@ -325,7 +325,8 @@ jobs:
           // Start the server
           app.listen(PORT, () => {
             log(`Robust app running on port ${PORT}`);
-          });' > robust-app.js
+          });
+          EOL
           
           # Update package.json
           node -e "const pkg = require('./package.json'); pkg.main = 'robust-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node robust-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
@@ -334,7 +335,8 @@ jobs:
       - name: Create web.config for Azure
         working-directory: ./server/dist
         run: |
-          echo '<?xml version="1.0" encoding="utf-8"?>
+          cat > web.config << 'EOL'
+          <?xml version="1.0" encoding="utf-8"?>
           <configuration>
             <system.webServer>
               <handlers>
@@ -376,7 +378,8 @@ jobs:
                 logDirectory="iisnode" 
                 debuggingEnabled="true" />
             </system.webServer>
-          </configuration>' > web.config
+          </configuration>
+          EOL
 
       # Log deployment package contents
       - name: Log deployment package contents
