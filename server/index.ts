@@ -17,7 +17,7 @@ console.log('Setting up middleware...');
 app.use(helmet());
 app.use(compression());
 app.use(cors({
-  origin: 'https://accessiblemap-gnddadh9ghbgc9e8.eastus-01.azurewebsites.net', // Updated to match the actual URL
+  origin: 'https://accessiblemap-gnddadh9ghbgc9e8.eastus-01.azurewebsites.net',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
