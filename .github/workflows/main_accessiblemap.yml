@@ -1,4 +1,6 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
+# More GitHub Actions for Azure: https://github.com/Azure/actions
+
 name: Build and deploy Node.js app to Azure Web App - accessiblemap
 on:
   push:
@@ -46,16 +48,37 @@ jobs:
             echo "Removing type:module from package.json"
             node -e "const pkg = require('./package.json'); delete pkg.type; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
           fi
-      # Create CommonJS wrapper
-      - name: Create CommonJS wrapper
+      # Create port check wrapper
+      - name: Create port check wrapper
         working-directory: ./server/dist
         run: |
-          echo 'const server = require("./index.js");' > server.cjs
+          echo 'try {
+            // Ensure the app uses the PORT provided by Azure
+            console.log("Starting application with enhanced error handling");
+            process.on("uncaughtException", (err) => {
+              console.error("UNCAUGHT EXCEPTION:", err);
+              console.error(err.stack);
+            });
+            
+            // Make sure we use the port Azure provides
+            if (!process.env.PORT) {
+              console.log("No PORT environment variable found, defaulting to 8080");
+              process.env.PORT = "8080";
+            }
+            
+            console.log(`Using PORT: ${process.env.PORT}`);
+            
+            // Load the application
+            require("./index.js");
+          } catch (err) {
+            console.error("STARTUP ERROR:", err);
+            console.error(err.stack);
+          }' > server.js
       # Modify package.json for Azure
       - name: Modify package.json for Azure
         working-directory: ./server/dist
         run: |
-          node -e "const pkg = require('./package.json'); pkg.main = 'server.cjs'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node server.cjs'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
+          node -e "const pkg = require('./package.json'); pkg.main = 'server.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node server.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
       # Install dependencies in server/dist
       - name: Install dependencies in server/dist
         working-directory: ./server/dist
@@ -72,17 +95,17 @@ jobs:
           <configuration>
             <system.webServer>
               <handlers>
-                <add name="iisnode" path="server.cjs" verb="*" modules="iisnode" />
+                <add name="iisnode" path="server.js" verb="*" modules="iisnode" />
               </handlers>
               <rewrite>
                 <rules>
                   <rule name="API">
                     <match url="api/*" />
-                    <action type="Rewrite" url="server.cjs" />
+                    <action type="Rewrite" url="server.js" />
                   </rule>
                   <rule name="Health">
                     <match url="health" />
-                    <action type="Rewrite" url="server.cjs" />
+                    <action type="Rewrite" url="server.js" />
                   </rule>
                   <rule name="StaticContent">
                     <match url="(.*)" />
@@ -96,11 +119,12 @@ jobs:
                     <conditions>
                       <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
                     </conditions>
-                    <action type="Rewrite" url="server.cjs" />
+                    <action type="Rewrite" url="server.js" />
                   </rule>
                 </rules>
               </rewrite>
-              <iisnode watchedFiles="web.config;*.js" node_env="production" />
+              <iisnode watchedFiles="web.config;*.js" node_env="production" loggingEnabled="true" />
+              <env key="PORT" value="8080" />
             </system.webServer>
           </configuration>' > web.config
       # Log deployment package contents
