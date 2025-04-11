@@ -1,6 +1,4 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-
 name: Build and deploy Node.js app to Azure Web App - accessiblemap
 on:
   push:
@@ -66,104 +64,170 @@ jobs:
         run: |
           cp -r ./dist/* ./server/dist/ || echo "No frontend files to copy"
 
-      # Create minimal test app for diagnostics
-      - name: Create minimal test app
+      # Create intermediate app with mock API
+      - name: Create intermediate app
         working-directory: ./server/dist
         run: |
-          # Create a bare-minimum Express app
+          # Create a wrapper server with mock API endpoints
           echo 'const express = require("express");
-          const app = express();
-          const fs = require("fs");
+          const helmet = require("helmet");
+          const compression = require("compression");
+          const cors = require("cors");
           const path = require("path");
-          const PORT = process.env.PORT || 8080;
-          
-          console.log("Starting minimal test app");
-          console.log("Current directory:", __dirname);
-          console.log("Files in directory:", fs.readdirSync(__dirname));
-          
-          // Create a diagnostic log file
-          fs.writeFileSync(path.join(__dirname, "startup.log"), "App started at " + new Date().toISOString() + "\n");
-          
-          // Add routes
-          app.get("/", (req, res) => {
-            console.log("Root endpoint hit");
-            fs.appendFileSync(path.join(__dirname, "startup.log"), "Root endpoint hit at " + new Date().toISOString() + "\n");
-            res.send("Hello from minimal test app");
-          });
-          
-          app.get("/health", (req, res) => {
-            console.log("Health endpoint hit");
-            fs.appendFileSync(path.join(__dirname, "startup.log"), "Health endpoint hit at " + new Date().toISOString() + "\n");
-            res.json({ status: "OK" });
-          });
-          
-          // Add a diagnostic endpoint
-          app.get("/diagnostic", (req, res) => {
-            console.log("Diagnostic endpoint hit");
-            const diagnosticInfo = {
-              nodeVersion: process.version,
-              env: Object.keys(process.env).reduce((result, key) => {
-                // Filter out sensitive environment variables
-                if (!key.includes("KEY") && !key.includes("SECRET") && !key.includes("PASSWORD")) {
-                  result[key] = process.env[key];
-                }
-                return result;
-              }, {}),
-              cwd: process.cwd(),
-              dirname: __dirname,
-              files: fs.readdirSync(__dirname),
-              timestamp: new Date().toISOString()
-            };
-            
+          const fs = require("fs");
+
+          // Create log directory
+          const logDir = path.join(__dirname, "logs");
+          if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir);
+          }
+
+          // Setup logging
+          const logFile = path.join(logDir, "app.log");
+          const log = (...args) => {
+            const message = args.map(arg => 
+              typeof arg === "object" ? JSON.stringify(arg) : arg
+            ).join(" ");
+            const timestamp = new Date().toISOString();
+            const logMessage = `${timestamp}: ${message}\n`;
+            console.log(message);
             try {
-              fs.writeFileSync(path.join(__dirname, "runtime-diagnostic.txt"), JSON.stringify(diagnosticInfo, null, 2));
-              diagnosticInfo.fileWriteSuccess = true;
+              fs.appendFileSync(logFile, logMessage);
             } catch (err) {
-              diagnosticInfo.fileWriteSuccess = false;
-              diagnosticInfo.writeError = err.message;
+              console.error("Failed to write to log file:", err);
             }
-            
-            fs.appendFileSync(path.join(__dirname, "startup.log"), "Diagnostic endpoint hit at " + new Date().toISOString() + "\n");
-            res.json(diagnosticInfo);
+          };
+
+          log("Starting intermediate server...");
+
+          const app = express();
+          const PORT = process.env.PORT || 8080;
+
+          log("Setting up middleware...");
+
+          // Middleware
+          app.use(helmet({
+            contentSecurityPolicy: false
+          }));
+          app.use(compression());
+          app.use(cors({
+            origin: "*",
+            methods: ["GET", "POST", "PUT", "DELETE"],
+            credentials: true
+          }));
+          app.use(express.json());
+
+          // Diagnostic endpoints
+          app.get("/health", (req, res) => {
+            log("Health check endpoint hit");
+            res.status(200).json({ status: "OK" });
           });
-          
-          // Serve static files if they exist
-          const staticPath = path.join(__dirname);
-          console.log("Serving static files from:", staticPath);
+
+          app.get("/api-test", (req, res) => {
+            log("API test endpoint hit");
+            res.json({
+              message: "API is working",
+              timestamp: new Date().toISOString()
+            });
+          });
+
+          // Mock user API endpoints
+          app.get("/api/users", (req, res) => {
+            log("GET /api/users endpoint hit");
+            res.json([
+              { id: 1, name: "Test User 1", email: "user1@example.com" },
+              { id: 2, name: "Test User 2", email: "user2@example.com" }
+            ]);
+          });
+
+          app.get("/api/users/:id", (req, res) => {
+            log(`GET /api/users/${req.params.id} endpoint hit`);
+            res.json({ id: parseInt(req.params.id), name: `Test User ${req.params.id}`, email: `user${req.params.id}@example.com` });
+          });
+
+          // Serve static frontend files
+          const staticPath = path.resolve(__dirname);
+          log(`Serving static files from: ${staticPath}`);
           app.use(express.static(staticPath));
-          
+
+          // Catch-all route for SPA
+          app.get("*", (req, res) => {
+            log(`Catch-all route hit for: ${req.url}`);
+            const indexPath = path.join(__dirname, "index.html");
+            log(`Serving index.html from: ${indexPath}`);
+            res.sendFile(indexPath, (err) => {
+              if (err) {
+                log(`Error serving index.html: ${err.message}`);
+                res.status(500).send("Server error");
+              }
+            });
+          });
+
           // Start the server
           app.listen(PORT, () => {
-            console.log(`Minimal test app running on port ${PORT}`);
-            fs.appendFileSync(path.join(__dirname, "startup.log"), "Server started on port " + PORT + " at " + new Date().toISOString() + "\n");
-          });' > minimal-app.js
+            log(`Intermediate server running on port ${PORT}`);
+            // List all available routes
+            const routes = [];
+            app._router.stack.forEach(middleware => {
+              if (middleware.route) {
+                // Routes registered directly on the app
+                routes.push(`${Object.keys(middleware.route.methods)[0].toUpperCase()} ${middleware.route.path}`);
+              } else if (middleware.name === "router") {
+                // Router middleware
+                middleware.handle.stack.forEach(handler => {
+                  if (handler.route) {
+                    routes.push(`${Object.keys(handler.route.methods)[0].toUpperCase()} ${middleware.regexp} ${handler.route.path}`);
+                  }
+                });
+              }
+            });
+            log("Registered routes:", routes);
+          });' > intermediate-app.js
           
           # Update package.json
-          node -e "const pkg = require('./package.json'); pkg.main = 'minimal-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node minimal-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
+          node -e "const pkg = require('./package.json'); pkg.main = 'intermediate-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node intermediate-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
 
-      # Create simplified web.config for test app
-      - name: Create simplified web.config
+      # Create web.config for Azure
+      - name: Create web.config for Azure
         working-directory: ./server/dist
         run: |
           echo '<?xml version="1.0" encoding="utf-8"?>
           <configuration>
             <system.webServer>
               <handlers>
-                <add name="iisnode" path="minimal-app.js" verb="*" modules="iisnode" />
+                <add name="iisnode" path="intermediate-app.js" verb="*" modules="iisnode" />
               </handlers>
               <rewrite>
                 <rules>
-                  <rule name="All Requests">
+                  <rule name="API">
+                    <match url="api/*" />
+                    <action type="Rewrite" url="intermediate-app.js" />
+                  </rule>
+                  <rule name="Health">
+                    <match url="health" />
+                    <action type="Rewrite" url="intermediate-app.js" />
+                  </rule>
+                  <rule name="API Test">
+                    <match url="api-test" />
+                    <action type="Rewrite" url="intermediate-app.js" />
+                  </rule>
+                  <rule name="StaticContent">
+                    <match url="(.*)" />
+                    <conditions>
+                      <add input="{REQUEST_FILENAME}" matchType="IsFile" />
+                    </conditions>
+                    <action type="None" />
+                  </rule>
+                  <rule name="DynamicContent">
                     <match url=".*" />
                     <conditions>
                       <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
                     </conditions>
-                    <action type="Rewrite" url="minimal-app.js" />
+                    <action type="Rewrite" url="intermediate-app.js" />
                   </rule>
                 </rules>
               </rewrite>
               <iisnode 
-                nodeProcessCommandLine="node"
                 watchedFiles="web.config;*.js"
                 loggingEnabled="true"
                 logDirectory="iisnode" 
@@ -175,10 +239,7 @@ jobs:
       - name: Create diagnostic test file
         working-directory: ./server/dist
         run: |
-          echo "Diagnostic test file created at deploy time: $(date)" > diagnostic-test.txt
-          echo "Node version during deployment: $(node -v)" >> diagnostic-test.txt
-          echo "Files in directory during deployment:" >> diagnostic-test.txt
-          ls -la >> diagnostic-test.txt
+          echo "Intermediate app diagnostic file created at deploy time: $(date)" > diagnostic-intermediate.txt
 
       # Log deployment package contents
       - name: Log deployment package contents
