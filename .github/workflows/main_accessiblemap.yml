@@ -77,7 +77,7 @@ jobs:
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
         with:
-          app-name: accessiblemap-gnddadh9ghbgc9e8
+          app-name: accessiblemap
           slot-name: production
           package: ./server/dist
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
