@@ -64,111 +64,19 @@ jobs:
         run: |
           cp -r ./dist/* ./server/dist/ || echo "No frontend files to copy"
 
-      # Create a testing form
-      - name: Create testing form
+      # Create schema-compatible app
+      - name: Create schema-compatible app
         working-directory: ./server/dist
         run: |
-          cat > test-signup.html << 'EOL'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>API Test Form</title>
-            <style>
-              body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-              .form-group { margin-bottom: 15px; }
-              label { display: block; margin-bottom: 5px; }
-              input, textarea { width: 100%; padding: 8px; box-sizing: border-box; }
-              button { padding: 10px 15px; background: #4CAF50; color: white; border: none; cursor: pointer; }
-              .response { margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px; white-space: pre-wrap; }
-            </style>
-          </head>
-          <body>
-            <h1>API Test Form</h1>
-            
-            <div class="form-group">
-              <label for="endpoint">API Endpoint:</label>
-              <input type="text" id="endpoint" value="/api/signup" />
-            </div>
-            
-            <div class="form-group">
-              <label for="method">Method:</label>
-              <select id="method">
-                <option value="POST">POST</option>
-                <option value="GET">GET</option>
-                <option value="PUT">PUT</option>
-                <option value="DELETE">DELETE</option>
-              </select>
-            </div>
-            
-            <div class="form-group">
-              <label for="payload">Request Payload (JSON):</label>
-              <textarea id="payload" rows="10">
-          {
-            "username": "testuser",
-            "email": "test@example.com",
-            "password": "password123",
-            "location": {
-              "latitude": 40.7128,
-              "longitude": -74.0060
-            }
-          }
-          </textarea>
-            </div>
-            
-            <button id="submit">Send Request</button>
-            
-            <div class="response" id="response"></div>
-            
-            <script>
-              document.getElementById('submit').addEventListener('click', async () => {
-                const endpoint = document.getElementById('endpoint').value;
-                const method = document.getElementById('method').value;
-                const payload = document.getElementById('payload').value;
-                const responseElement = document.getElementById('response');
-                
-                try {
-                  responseElement.textContent = 'Sending request...';
-                  
-                  const response = await fetch(endpoint, {
-                    method: method,
-                    headers: {
-                      'Content-Type': 'application/json'
-                    },
-                    body: method !== 'GET' ? payload : undefined
-                  });
-                  
-                  const data = await response.text();
-                  let formattedData;
-                  
-                  try {
-                    formattedData = JSON.stringify(JSON.parse(data), null, 2);
-                  } catch (e) {
-                    formattedData = data;
-                  }
-                  
-                  responseElement.textContent = `Status: ${response.status} ${response.statusText}\n\n${formattedData}`;
-                } catch (error) {
-                  responseElement.textContent = `Error: ${error.message}`;
-                }
-              });
-            </script>
-          </body>
-          </html>
-          EOL
-
-      # Create very permissive debug app
-      - name: Create permissive debug app
-        working-directory: ./server/dist
-        run: |
-          cat > permissive-app.js << 'EOL'
+          cat > schema-app.js << 'EOL'
           const express = require("express");
           const helmet = require("helmet");
           const compression = require("compression");
+          const cors = require("cors");
           const path = require("path");
           const fs = require("fs");
           const util = require("util");
+          const crypto = require("crypto");
           
           // Create log directory
           const logDir = path.join(__dirname, "logs");
@@ -177,7 +85,7 @@ jobs:
           }
           
           // Setup logging
-          const logFile = path.join(logDir, "permissive.log");
+          const logFile = path.join(logDir, "schema.log");
           const log = (...args) => {
             const message = args.map(arg => 
               typeof arg === "object" ? util.inspect(arg, { depth: null }) : arg
@@ -202,135 +110,531 @@ jobs:
             log(`UNHANDLED REJECTION: ${reason}`);
           });
           
-          log("Starting permissive debug app...");
+          log("Starting schema-compatible app...");
           
           const app = express();
           const PORT = process.env.PORT || 8080;
           
+          // Middleware
+          app.use(helmet({
+            contentSecurityPolicy: false
+          }));
+          app.use(compression());
+          app.use(cors({
+            origin: "*",
+            methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            credentials: true
+          }));
+          
+          // Body parsing - accept various formats
+          app.use(express.json());
+          app.use(express.urlencoded({ extended: true }));
+          
           // Log all requests
           app.use((req, res, next) => {
             log(`REQUEST: ${req.method} ${req.url}`);
-            log(`HEADERS: ${util.inspect(req.headers)}`);
-            next();
-          });
-          
-          // CORS handling - allow everything
-          app.use((req, res, next) => {
-            res.header("Access-Control-Allow-Origin", "*");
-            res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-            res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-            
-            // Handle preflight requests
-            if (req.method === 'OPTIONS') {
-              return res.status(200).end();
-            }
-            
-            next();
-          });
-          
-          // Body parsing middleware - raw body access
-          app.use(express.text({ type: '*/*' }));
-          
-          // Custom JSON parsing
-          app.use((req, res, next) => {
-            if (req.is('application/json') || req.is('text/plain') || req.is('*/json')) {
-              try {
-                log(`RAW BODY: ${req.body}`);
-                req.rawBody = req.body;
-                req.jsonBody = JSON.parse(req.body);
-                log(`PARSED JSON: ${util.inspect(req.jsonBody)}`);
-              } catch (e) {
-                log(`JSON PARSE ERROR: ${e.message}`);
-                // Continue anyway, don't reject the request
-              }
+            if (req.body && Object.keys(req.body).length > 0) {
+              log(`BODY: ${util.inspect(req.body)}`);
             }
             next();
           });
           
-          // Signup endpoint that accepts anything
-          app.post('/api/signup', (req, res) => {
-            log('SIGNUP ENDPOINT HIT');
-            log(`BODY TYPE: ${typeof req.body}`);
-            log(`BODY: ${util.inspect(req.body)}`);
-            
-            // Accept anything and parse it somehow
-            let username, email, password;
-            
-            if (typeof req.body === 'string') {
-              // Try to parse as JSON
-              try {
-                const parsed = JSON.parse(req.body);
-                log(`Parsed body as JSON: ${util.inspect(parsed)}`);
-                
-                // Try to extract from various formats
-                username = parsed.username || parsed.user || parsed.name || 'default_user';
-                email = parsed.email || parsed.mail || username + '@example.com';
-                password = parsed.password || parsed.pass || 'default_password';
-              } catch (e) {
-                log(`Failed to parse body as JSON: ${e.message}`);
-                
-                // Just use the raw body as something
-                username = 'raw_user';
-                email = 'raw@example.com';
-                password = 'raw_password';
+          // Database connection
+          let db = null;
+          let dbConnected = false;
+          
+          // In-memory fallback
+          const users = [];
+          
+          // Connect to database
+          const connectDatabase = async () => {
+            try {
+              const DB_HOST = process.env.DB_HOST;
+              const DB_USER = process.env.DB_USER;
+              const DB_PASS = process.env.DB_PASS;
+              const DB_NAME = process.env.DB_NAME;
+              
+              log("Database connection parameters:");
+              log(`DB_HOST: ${DB_HOST}`);
+              log(`DB_USER: ${DB_USER}`);
+              log(`DB_NAME: ${DB_NAME}`);
+              log(`DB_PASS: ${DB_PASS ? "[REDACTED]" : "Missing"}`);
+              
+              if (!DB_HOST || !DB_USER || !DB_PASS || !DB_NAME) {
+                log("ERROR: Missing database credentials");
+                return false;
               }
-            } else if (req.jsonBody) {
-              // We already parsed it in middleware
-              username = req.jsonBody.username || req.jsonBody.user || req.jsonBody.name || 'json_user';
-              email = req.jsonBody.email || req.jsonBody.mail || username + '@example.com';
-              password = req.jsonBody.password || req.jsonBody.pass || 'json_password';
-            } else if (req.body && typeof req.body === 'object') {
-              // It was automatically parsed somehow
-              username = req.body.username || req.body.user || req.body.name || 'object_user';
-              email = req.body.email || req.body.mail || username + '@example.com';
-              password = req.body.password || req.body.pass || 'object_password';
+              
+              // Require mssql here to avoid dependency issues if not available
+              const sql = require('mssql');
+              
+              const config = {
+                user: DB_USER,
+                password: DB_PASS,
+                server: DB_HOST,
+                database: DB_NAME,
+                options: {
+                  encrypt: true,
+                  trustServerCertificate: false,
+                  connectTimeout: 30000
+                }
+              };
+              
+              log("Attempting to connect to database...");
+              const pool = await sql.connect(config);
+              log("Database connection successful!");
+              
+              // Verify that Users table exists
+              const tableCheck = await pool.request().query(`
+                SELECT OBJECT_ID('dbo.Users') as TableID
+              `);
+              
+              if (!tableCheck.recordset[0].TableID) {
+                log("ERROR: Users table does not exist in the database");
+                return false;
+              }
+              
+              log("Users table found in database");
+              db = pool;
+              dbConnected = true;
+              return true;
+            } catch (err) {
+              log(`Database connection error: ${err.message}`);
+              log(err.stack);
+              return false;
+            }
+          };
+          
+          // Initialize database
+          connectDatabase().then(success => {
+            if (success) {
+              log("Database connection established");
             } else {
-              // Default values
-              username = 'default_user';
-              email = 'default@example.com';
-              password = 'default_password';
+              log("Database connection failed, falling back to in-memory storage");
             }
+          });
+          
+          // Add database access middleware
+          app.use((req, res, next) => {
+            req.db = db;
+            req.dbConnected = dbConnected;
+            req.users = users;
+            next();
+          });
+          
+          // API Routes
+          
+          // Signup endpoint
+          app.post('/api/signup', async (req, res) => {
+            log('Signup endpoint hit');
             
-            log(`EXTRACTED: username=${username}, email=${email}, password=${password}`);
+            try {
+              // Extract data - be flexible with field names
+              const body = req.body;
+              
+              // Check for required fields according to your schema
+              const email = body.email || body.mail;
+              const password = body.password || body.pass;
+              let firstName = body.first_name || body.firstName || body.firstname;
+              let lastName = body.last_name || body.lastName || body.lastname;
+              
+              // If username is provided but not first/last name, split it
+              if ((!firstName || !lastName) && body.username) {
+                const parts = body.username.split(' ');
+                if (parts.length >= 2) {
+                  firstName = firstName || parts[0];
+                  lastName = lastName || parts.slice(1).join(' ');
+                } else {
+                  firstName = firstName || body.username;
+                  lastName = lastName || '';
+                }
+              }
+              
+              // Final fallbacks
+              firstName = firstName || 'Default';
+              lastName = lastName || 'User';
+              
+              if (!email) {
+                return res.status(400).json({
+                  success: false,
+                  message: 'Email is required'
+                });
+              }
+              
+              if (!password) {
+                return res.status(400).json({
+                  success: false,
+                  message: 'Password is required'
+                });
+              }
+              
+              // Extract location data if present
+              const location = body.location || {};
+              const latitude = location.latitude || location.lat;
+              const longitude = location.longitude || location.lng;
+              
+              log(`Processing signup: email=${email}, firstName=${firstName}, lastName=${lastName}`);
+              
+              // Hash password
+              const passwordHash = crypto
+                .createHash('sha256')
+                .update(password)
+                .digest('hex');
+              
+              if (req.dbConnected) {
+                try {
+                  log("Checking if user exists in database...");
+                  
+                  // Check if user exists
+                  const userCheck = await req.db.request()
+                    .input('email', req.db.VarChar(100), email)
+                    .query('SELECT * FROM Users WHERE email = @email');
+                  
+                  if (userCheck.recordset && userCheck.recordset.length > 0) {
+                    log(`User with email ${email} already exists`);
+                    return res.status(409).json({
+                      success: false,
+                      message: 'User with this email already exists'
+                    });
+                  }
+                  
+                  log("User doesn't exist, creating new user in database...");
+                  
+                  // Create new user
+                  const result = await req.db.request()
+                    .input('email', req.db.VarChar(100), email)
+                    .input('password_hash', req.db.VarChar(255), passwordHash)
+                    .input('first_name', req.db.VarChar(100), firstName)
+                    .input('last_name', req.db.VarChar(100), lastName)
+                    .query(`
+                      INSERT INTO Users (email, password_hash, first_name, last_name)
+                      VALUES (@email, @password_hash, @first_name, @last_name);
+                      SELECT SCOPE_IDENTITY() AS user_id;
+                    `);
+                  
+                  const userId = result.recordset[0].user_id;
+                  log(`User created in database with ID: ${userId}`);
+                  
+                  // If we have location data, we could save it in user preferences table
+                  if (latitude && longitude) {
+                    try {
+                      log(`Saving user location data for user ${userId}`);
+                      // Add code here if you want to store location in a preferences table
+                    } catch (locErr) {
+                      log(`Error saving location data: ${locErr.message}`);
+                      // Non-fatal error, continue
+                    }
+                  }
+                  
+                  return res.status(201).json({
+                    success: true,
+                    message: 'User created successfully in database',
+                    user: {
+                      id: userId,
+                      email,
+                      firstName,
+                      lastName
+                    }
+                  });
+                } catch (dbErr) {
+                  log(`Database error: ${dbErr.message}`);
+                  log(dbErr.stack);
+                  
+                  // Fall back to in-memory
+                  log("Falling back to in-memory storage due to database error");
+                }
+              } else {
+                log("Database not connected, using in-memory storage");
+              }
+              
+              // In-memory fallback
+              const userId = users.length + 1;
+              users.push({
+                user_id: userId,
+                email,
+                password_hash: passwordHash,
+                first_name: firstName,
+                last_name: lastName,
+                location: { latitude, longitude }
+              });
+              
+              log(`User created in memory with ID: ${userId}`);
+              return res.status(201).json({
+                success: true,
+                message: 'User created successfully (in-memory storage)',
+                user: {
+                  id: userId,
+                  email,
+                  firstName,
+                  lastName
+                }
+              });
+            } catch (err) {
+              log(`Error in signup process: ${err.message}`);
+              log(err.stack);
+              return res.status(500).json({
+                success: false,
+                message: 'Server error during signup',
+                error: err.message
+              });
+            }
+          });
+          
+          // Login endpoint
+          app.post('/api/login', async (req, res) => {
+            log('Login endpoint hit');
             
-            // Always succeed with what we got
-            res.status(201).json({
-              success: true,
-              message: 'User registered successfully (debug mode)',
-              user: {
-                id: Math.floor(Math.random() * 1000) + 1,
-                username,
-                email
+            try {
+              const { email, password } = req.body;
+              
+              if (!email || !password) {
+                return res.status(400).json({
+                  success: false,
+                  message: 'Email and password are required'
+                });
+              }
+              
+              // Hash password for comparison
+              const passwordHash = crypto
+                .createHash('sha256')
+                .update(password)
+                .digest('hex');
+              
+              if (req.dbConnected) {
+                try {
+                  const result = await req.db.request()
+                    .input('email', req.db.VarChar(100), email)
+                    .query('SELECT * FROM Users WHERE email = @email');
+                  
+                  if (!result.recordset || result.recordset.length === 0) {
+                    return res.status(401).json({
+                      success: false,
+                      message: 'Invalid email or password'
+                    });
+                  }
+                  
+                  const user = result.recordset[0];
+                  
+                  if (user.password_hash !== passwordHash) {
+                    return res.status(401).json({
+                      success: false,
+                      message: 'Invalid email or password'
+                    });
+                  }
+                  
+                  log(`User ${user.user_id} logged in successfully`);
+                  return res.json({
+                    success: true,
+                    message: 'Login successful',
+                    user: {
+                      id: user.user_id,
+                      email: user.email,
+                      firstName: user.first_name,
+                      lastName: user.last_name
+                    }
+                  });
+                } catch (dbErr) {
+                  log(`Database error during login: ${dbErr.message}`);
+                  // Fall back to in-memory
+                }
+              }
+              
+              // In-memory fallback
+              const user = users.find(u => u.email === email);
+              
+              if (!user || user.password_hash !== passwordHash) {
+                return res.status(401).json({
+                  success: false,
+                  message: 'Invalid email or password'
+                });
+              }
+              
+              log(`User ${user.user_id} logged in successfully (from memory)`);
+              return res.json({
+                success: true,
+                message: 'Login successful (from in-memory storage)',
+                user: {
+                  id: user.user_id,
+                  email: user.email,
+                  firstName: user.first_name,
+                  lastName: user.last_name
+                }
+              });
+            } catch (err) {
+              log(`Error in login process: ${err.message}`);
+              return res.status(500).json({
+                success: false,
+                message: 'Server error during login'
+              });
+            }
+          });
+          
+          // List users
+          app.get('/api/users', async (req, res) => {
+            log('List users endpoint hit');
+            
+            try {
+              if (req.dbConnected) {
+                const result = await req.db.request()
+                  .query('SELECT user_id, email, first_name, last_name, registration_date FROM Users');
+                
+                log(`Retrieved ${result.recordset.length} users from database`);
+                return res.json(result.recordset);
+              }
+              
+              // In-memory fallback
+              log(`Retrieved ${users.length} users from memory`);
+              return res.json(users.map(({ password_hash, ...user }) => user));
+            } catch (err) {
+              log(`Error listing users: ${err.message}`);
+              return res.status(500).json({
+                success: false,
+                message: 'Server error when retrieving users',
+                error: err.message
+              });
+            }
+          });
+          
+          // Get user by ID
+          app.get('/api/users/:id', async (req, res) => {
+            const userId = parseInt(req.params.id);
+            log(`Get user endpoint hit for ID: ${userId}`);
+            
+            try {
+              if (req.dbConnected) {
+                const result = await req.db.request()
+                  .input('user_id', req.db.Int, userId)
+                  .query('SELECT user_id, email, first_name, last_name, registration_date FROM Users WHERE user_id = @user_id');
+                
+                if (!result.recordset || result.recordset.length === 0) {
+                  return res.status(404).json({
+                    success: false,
+                    message: 'User not found'
+                  });
+                }
+                
+                return res.json(result.recordset[0]);
+              }
+              
+              // In-memory fallback
+              const user = users.find(u => u.user_id === userId);
+              
+              if (!user) {
+                return res.status(404).json({
+                  success: false,
+                  message: 'User not found'
+                });
+              }
+              
+              const { password_hash, ...userData } = user;
+              return res.json(userData);
+            } catch (err) {
+              log(`Error retrieving user: ${err.message}`);
+              return res.status(500).json({
+                success: false,
+                message: 'Server error when retrieving user',
+                error: err.message
+              });
+            }
+          });
+          
+          // Add geolocation fallback API
+          app.get('/api/geolocation', (req, res) => {
+            log('Geolocation fallback API hit');
+            // Return a default location (New York City)
+            res.json({
+              status: 'success',
+              location: {
+                latitude: 40.7128,
+                longitude: -74.0060,
+                accuracy: 1000,
+                source: 'mock'
               }
             });
           });
           
-          // Echo endpoint
-          app.post('/api/echo', (req, res) => {
-            log('ECHO ENDPOINT HIT');
-            res.json({
-              method: req.method,
-              url: req.url,
-              headers: req.headers,
-              body: req.body,
-              rawBody: req.rawBody,
-              jsonBody: req.jsonBody,
-              contentType: req.get('Content-Type'),
-              timestamp: new Date().toISOString()
-            });
+          // Health check endpoint
+          app.get('/health', async (req, res) => {
+            log('Health check endpoint hit');
+            
+            try {
+              let dbStatus = 'disconnected';
+              let dbUserCount = 0;
+              
+              if (dbConnected) {
+                try {
+                  const result = await db.request().query('SELECT COUNT(*) as count FROM Users');
+                  dbUserCount = result.recordset[0].count;
+                  dbStatus = 'connected';
+                } catch (err) {
+                  dbStatus = `error: ${err.message}`;
+                }
+              }
+              
+              res.json({
+                status: 'OK',
+                timestamp: new Date().toISOString(),
+                database: {
+                  status: dbStatus,
+                  userCount: dbUserCount
+                },
+                memory: {
+                  userCount: users.length
+                },
+                environment: process.env.NODE_ENV || 'development'
+              });
+            } catch (err) {
+              log(`Health check error: ${err.message}`);
+              res.status(500).json({
+                status: 'ERROR',
+                error: err.message
+              });
+            }
           });
           
-          // Health check
-          app.get('/health', (req, res) => {
-            res.json({ status: 'OK', mode: 'permissive' });
+          // Database test endpoint
+          app.get('/api/db-test', async (req, res) => {
+            log('Database test endpoint hit');
+            
+            try {
+              if (!dbConnected) {
+                return res.status(503).json({
+                  success: false,
+                  message: 'Database not connected',
+                  connectionParams: {
+                    host: process.env.DB_HOST || 'not set',
+                    user: process.env.DB_USER || 'not set',
+                    database: process.env.DB_NAME || 'not set',
+                    password: process.env.DB_PASS ? 'set (redacted)' : 'not set'
+                  }
+                });
+              }
+              
+              // Test queries
+              const versionResult = await db.request().query('SELECT @@VERSION as version');
+              const tableResult = await db.request().query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'");
+              
+              // Get list of tables
+              const tables = tableResult.recordset.map(record => record.TABLE_NAME);
+              
+              return res.json({
+                success: true,
+                message: 'Database connection successful',
+                version: versionResult.recordset[0].version,
+                tables: tables,
+                timestamp: new Date().toISOString()
+              });
+            } catch (err) {
+              log(`Database test error: ${err.message}`);
+              return res.status(500).json({
+                success: false,
+                message: 'Database test failed',
+                error: err.message
+              });
+            }
           });
           
-          // Serve test page
-          app.get('/test', (req, res) => {
-            res.sendFile(path.join(__dirname, 'test-signup.html'));
-          });
-          
-          // Static files
+          // Serve static files
           app.use(express.static(path.resolve(__dirname)));
           
           // SPA fallback
@@ -340,19 +644,23 @@ jobs:
           
           // Error handler
           app.use((err, req, res, next) => {
-            log(`ERROR: ${err.message}`);
+            log(`Express error handler: ${err.message}`);
             log(err.stack);
-            res.status(500).json({ error: 'Internal server error' });
+            res.status(500).json({
+              success: false,
+              message: 'Internal server error',
+              error: err.message
+            });
           });
           
           // Start server
           app.listen(PORT, () => {
-            log(`Permissive debug app running on port ${PORT}`);
+            log(`Schema-compatible app running on port ${PORT}`);
           });
           EOL
           
           # Update package.json
-          node -e "const pkg = require('./package.json'); pkg.main = 'permissive-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node permissive-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
+          node -e "const pkg = require('./package.json'); pkg.main = 'schema-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node schema-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
 
       # Create web.config for Azure
       - name: Create web.config for Azure
@@ -363,21 +671,17 @@ jobs:
           <configuration>
             <system.webServer>
               <handlers>
-                <add name="iisnode" path="permissive-app.js" verb="*" modules="iisnode" />
+                <add name="iisnode" path="schema-app.js" verb="*" modules="iisnode" />
               </handlers>
               <rewrite>
                 <rules>
                   <rule name="API">
                     <match url="api/*" />
-                    <action type="Rewrite" url="permissive-app.js" />
-                  </rule>
-                  <rule name="Test">
-                    <match url="test" />
-                    <action type="Rewrite" url="permissive-app.js" />
+                    <action type="Rewrite" url="schema-app.js" />
                   </rule>
                   <rule name="Health">
                     <match url="health" />
-                    <action type="Rewrite" url="permissive-app.js" />
+                    <action type="Rewrite" url="schema-app.js" />
                   </rule>
                   <rule name="StaticContent">
                     <match url="(.*)" />
@@ -391,7 +695,7 @@ jobs:
                     <conditions>
                       <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
                     </conditions>
-                    <action type="Rewrite" url="permissive-app.js" />
+                    <action type="Rewrite" url="schema-app.js" />
                   </rule>
                 </rules>
               </rewrite>
