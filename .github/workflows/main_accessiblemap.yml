@@ -24,17 +24,33 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18' # Use the Node.js version compatible with your app
+          node-version: '18'
 
-      # Install dependencies
-      - name: Install dependencies
-        run: npm install
+      # Install frontend dependencies
+      - name: Install frontend dependencies
+        run: npm ci
 
-      # Build the React app
-      - name: Build the app
-        run: npm run build
+      # Install backend dependencies
+      - name: Install backend dependencies
+        working-directory: ./server
+        run: npm ci
+
+      # Build the frontend
+      - name: Build the frontend
+        run: npm run build:frontend
         env:
           VITE_OPENROUTE_API_KEY: ${{ secrets.VITE_OPENROUTE_API_KEY }}
+
+      # Build the backend
+      - name: Build the backend
+        working-directory: ./server
+        run: npm run build
+
+      # Copy frontend build output to backend dist folder
+      - name: Copy frontend assets to backend
+        run: |
+          mkdir -p ./server/dist/public
+          cp -r ./dist/* ./server/dist/public/
 
       # Deploy to Azure App Service
       - name: Deploy to Azure App Service
@@ -42,14 +58,5 @@ jobs:
         with:
           app-name: accessiblemap
           slot-name: production
-          package: ./dist # Vite outputs the build to the 'dist' folder
+          package: ./server/dist
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-      
-      - name: 'Deploy to Azure Web App'
-        uses: azure/webapps-deploy@v3
-        id: deploy-to-webapp
-        with:
-          app-name: 'accessiblemap'
-          slot-name: 'Production'
-          package: .
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_89ECE60984014AD1BCA0F567A8D08D44 }}
