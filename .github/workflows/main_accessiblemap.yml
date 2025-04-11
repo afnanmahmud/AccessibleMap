@@ -64,11 +64,11 @@ jobs:
         run: |
           cp -r ./dist/* ./server/dist/ || echo "No frontend files to copy"
 
-      # Create enhanced app with full API support
-      - name: Create enhanced app with API support
+      # Create debug app with request logging
+      - name: Create debug app
         working-directory: ./server/dist
         run: |
-          cat > enhanced-app.js << 'EOL'
+          cat > debug-app.js << 'EOL'
           const express = require("express");
           const helmet = require("helmet");
           const compression = require("compression");
@@ -84,10 +84,10 @@ jobs:
           }
           
           // Setup logging
-          const logFile = path.join(logDir, "app.log");
+          const logFile = path.join(logDir, "debug.log");
           const log = (...args) => {
             const message = args.map(arg => 
-              typeof arg === "object" ? JSON.stringify(arg) : arg
+              typeof arg === "object" ? JSON.stringify(arg, null, 2) : arg
             ).join(" ");
             const timestamp = new Date().toISOString();
             const logMessage = `${timestamp}: ${message}\n`;
@@ -103,18 +103,47 @@ jobs:
           process.on("uncaughtException", (err) => {
             log(`UNCAUGHT EXCEPTION: ${err.message}`);
             log(err.stack);
-            // Don't exit the process
           });
           
           process.on("unhandledRejection", (reason, promise) => {
             log(`UNHANDLED REJECTION: ${reason}`);
-            // Don't exit the process
           });
           
-          log("Starting enhanced app with full API support...");
+          log("Starting debug app...");
           
           const app = express();
           const PORT = process.env.PORT || 8080;
+          
+          // Enable request logging middleware
+          app.use((req, res, next) => {
+            log(`[REQUEST] ${req.method} ${req.url}`);
+            log(`[HEADERS] ${JSON.stringify(req.headers, null, 2)}`);
+            
+            // Clone the request data for logging
+            const oldJson = res.json;
+            res.json = function(data) {
+              log(`[RESPONSE] ${JSON.stringify(data, null, 2)}`);
+              return oldJson.apply(res, arguments);
+            };
+            
+            // Log raw request body for debugging
+            const chunks = [];
+            req.on('data', chunk => chunks.push(chunk));
+            req.on('end', () => {
+              if (chunks.length > 0) {
+                const body = Buffer.concat(chunks).toString();
+                log(`[REQUEST BODY RAW] ${body}`);
+                try {
+                  const jsonBody = JSON.parse(body);
+                  log(`[REQUEST BODY JSON] ${JSON.stringify(jsonBody, null, 2)}`);
+                } catch (e) {
+                  log(`[REQUEST BODY PARSE ERROR] ${e.message}`);
+                }
+              }
+            });
+            
+            next();
+          });
           
           log("Setting up middleware...");
           
@@ -125,401 +154,151 @@ jobs:
           app.use(compression());
           app.use(cors({
             origin: "*",
-            methods: ["GET", "POST", "PUT", "DELETE"],
+            methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             credentials: true
           }));
-          app.use(express.json());
           
-          // Database connection state
-          let dbConnected = false;
-          let dbConnection = null;
+          // IMPORTANT: We're removing express.json() middleware to see raw body
+          // app.use(express.json());
           
-          // In-memory user storage (fallback when DB is unavailable)
+          // In-memory user storage
           const users = [
             { id: 1, username: "user1", email: "user1@example.com", password: "hashedpassword1", location: { lat: 40.7128, lng: -74.0060 } },
             { id: 2, username: "user2", email: "user2@example.com", password: "hashedpassword2", location: { lat: 34.0522, lng: -118.2437 } }
           ];
           
-          // Database connection function with retry
-          const connectToDatabase = async (retryCount = 0) => {
-            const maxRetries = 3;
-            const DB_HOST = process.env.DB_HOST;
-            const DB_USER = process.env.DB_USER;
-            const DB_PASS = process.env.DB_PASS;
-            const DB_NAME = process.env.DB_NAME;
-            
-            if (!DB_HOST || !DB_USER || !DB_PASS || !DB_NAME) {
-              log("Missing database environment variables. Check your configuration.");
-              return null;
-            }
-            
-            log("Connecting to database...");
-            log(`DB_HOST: ${DB_HOST}`);
-            log(`DB_USER: ${DB_USER}`);
-            log(`DB_NAME: ${DB_NAME}`);
-            
-            try {
-              // Dynamically import the database module to avoid errors if not available
-              const sql = require("mssql");
-              
-              const config = {
-                user: DB_USER,
-                password: DB_PASS,
-                server: DB_HOST,
-                database: DB_NAME,
-                options: {
-                  encrypt: true,
-                  trustServerCertificate: false
-                }
-              };
-              
-              // Add 5 second timeout
-              const timeout = setTimeout(() => {
-                throw new Error("Database connection timeout after 5 seconds");
-              }, 5000);
-              
-              const pool = await sql.connect(config);
-              clearTimeout(timeout);
-              
-              log("Database connection successful");
-              dbConnected = true;
-              dbConnection = pool;
-              return pool;
-            } catch (err) {
-              log(`Database connection error: ${err.message}`);
-              log(err.stack);
-              
-              if (retryCount < maxRetries) {
-                const delay = 1000 * Math.pow(2, retryCount);
-                log(`Retrying database connection in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})...`);
-                setTimeout(() => connectToDatabase(retryCount + 1), delay);
-              } else {
-                log("Maximum retry attempts reached. Database connection failed.");
-              }
-              
-              return null;
-            }
-          };
-          
-          // Initialize database connection without blocking app startup
-          connectToDatabase().catch(err => {
-            log(`Initial database connection failed: ${err.message}`);
-          });
-          
-          // Middleware to handle database errors
+          // Add request body debugging middleware
           app.use((req, res, next) => {
-            req.db = dbConnection;
-            req.dbConnected = dbConnected;
-            req.users = users; // Fallback user data
+            req.users = users;
             next();
           });
           
-          // API routes
-          log("Setting up API routes...");
+          // Echo endpoint for debugging
+          app.post("/api/debug-echo", (req, res) => {
+            log("Debug echo endpoint hit");
+            
+            // Collect body manually since we removed json middleware
+            const chunks = [];
+            req.on('data', chunk => chunks.push(chunk));
+            req.on('end', () => {
+              try {
+                const body = Buffer.concat(chunks).toString();
+                log(`Echo body: ${body}`);
+                
+                let jsonBody = {};
+                try {
+                  jsonBody = JSON.parse(body);
+                } catch (e) {
+                  log(`Parse error: ${e.message}`);
+                }
+                
+                res.json({
+                  message: "Echo response",
+                  receivedHeaders: req.headers,
+                  receivedBody: jsonBody,
+                  receivedBodyRaw: body,
+                  receivedMethod: req.method,
+                  receivedUrl: req.url,
+                  timestamp: new Date().toISOString()
+                });
+              } catch (err) {
+                log(`Echo error: ${err.message}`);
+                res.status(500).json({ error: err.message });
+              }
+            });
+          });
+          
+          // User signup API with detailed debugging
+          app.post("/api/signup", (req, res) => {
+            log("Signup API hit");
+            
+            // Collect body manually
+            const chunks = [];
+            req.on('data', chunk => chunks.push(chunk));
+            req.on('end', () => {
+              try {
+                const body = Buffer.concat(chunks).toString();
+                log(`Signup body raw: ${body}`);
+                
+                let userData;
+                try {
+                  userData = JSON.parse(body);
+                  log(`Signup body parsed: ${JSON.stringify(userData, null, 2)}`);
+                } catch (e) {
+                  log(`Signup body parse error: ${e.message}`);
+                  return res.status(400).json({ 
+                    status: "error", 
+                    message: "Invalid JSON in request body",
+                    parseError: e.message
+                  });
+                }
+                
+                // Accept any data format for debugging
+                const { username, email, password, name, user_name, userName, location } = userData;
+                
+                // Use any available username field
+                const finalUsername = username || name || user_name || userName || "user" + (req.users.length + 1);
+                const finalEmail = email || finalUsername + "@example.com";
+                const finalPassword = password || "default";
+                
+                log(`Processed signup data: username=${finalUsername}, email=${finalEmail}`);
+                
+                // Simple validation for debugging
+                if (!finalEmail.includes("@")) {
+                  log("Invalid email format");
+                  return res.status(400).json({ 
+                    status: "error", 
+                    message: "Invalid email format" 
+                  });
+                }
+                
+                // Hash password (simple version)
+                const hashedPassword = crypto
+                  .createHash("sha256")
+                  .update(finalPassword)
+                  .digest("hex");
+                
+                // Create new user in memory
+                const newUser = {
+                  id: req.users.length + 1,
+                  username: finalUsername,
+                  email: finalEmail,
+                  password: hashedPassword,
+                  location: location || { lat: null, lng: null }
+                };
+                
+                req.users.push(newUser);
+                
+                log(`User created in memory with ID: ${newUser.id}`);
+                return res.status(201).json({
+                  status: "success",
+                  message: "User created successfully (debug mode)",
+                  user: {
+                    id: newUser.id,
+                    username: finalUsername,
+                    email: finalEmail
+                  }
+                });
+              } catch (err) {
+                log(`Error in signup process: ${err.message}`);
+                log(err.stack);
+                return res.status(500).json({
+                  status: "error",
+                  message: "Server error during signup",
+                  error: err.message
+                });
+              }
+            });
+          });
           
           // Health check endpoint
           app.get("/health", (req, res) => {
             log("Health check endpoint hit");
             res.status(200).json({ 
               status: "OK",
-              database: dbConnected ? "connected" : "disconnected"
+              mode: "debug"
             });
           });
-          
-          // API test endpoint
-          app.get("/api-test", (req, res) => {
-            log("API test endpoint hit");
-            res.json({
-              message: "API is working",
-              timestamp: new Date().toISOString(),
-              database: dbConnected ? "connected" : "disconnected"
-            });
-          });
-          
-          // Add geolocation fallback API
-          app.get("/api/geolocation", (req, res) => {
-            log("Geolocation fallback API hit");
-            // Return a default location (New York City)
-            res.json({
-              status: "success",
-              location: {
-                latitude: 40.7128,
-                longitude: -74.0060,
-                accuracy: 1000,
-                source: "mock"
-              }
-            });
-          });
-          
-          // User signup API
-          app.post("/api/signup", async (req, res) => {
-            log("Signup API hit");
-            log(`Request body: ${JSON.stringify(req.body)}`);
-            
-            try {
-              const { username, email, password, location } = req.body;
-              
-              if (!username || !email || !password) {
-                return res.status(400).json({ 
-                  status: "error", 
-                  message: "Missing required fields" 
-                });
-              }
-              
-              // Simple email validation
-              if (!email.includes("@")) {
-                return res.status(400).json({ 
-                  status: "error", 
-                  message: "Invalid email format" 
-                });
-              }
-              
-              // Hash password (simple version)
-              const hashedPassword = crypto
-                .createHash("sha256")
-                .update(password)
-                .digest("hex");
-              
-              if (req.dbConnected) {
-                log("Attempting to save user to database");
-                try {
-                  // Check if user already exists
-                  const userCheck = await req.db.request()
-                    .input("email", req.db.VarChar, email)
-                    .query("SELECT * FROM Users WHERE email = @email");
-                    
-                  if (userCheck.recordset.length > 0) {
-                    return res.status(409).json({ 
-                      status: "error", 
-                      message: "User with this email already exists" 
-                    });
-                  }
-                  
-                  // Insert new user
-                  const result = await req.db.request()
-                    .input("username", req.db.VarChar, username)
-                    .input("email", req.db.VarChar, email)
-                    .input("password", req.db.VarChar, hashedPassword)
-                    .input("latitude", req.db.Float, location?.latitude || null)
-                    .input("longitude", req.db.Float, location?.longitude || null)
-                    .query("INSERT INTO Users (username, email, password, latitude, longitude) VALUES (@username, @email, @password, @latitude, @longitude); SELECT SCOPE_IDENTITY() AS id");
-                  
-                  const userId = result.recordset[0].id;
-                  
-                  log(`User created successfully with ID: ${userId}`);
-                  return res.status(201).json({
-                    status: "success",
-                    message: "User created successfully",
-                    user: {
-                      id: userId,
-                      username,
-                      email
-                    }
-                  });
-                } catch (dbErr) {
-                  log(`Database error during signup: ${dbErr.message}`);
-                  log(dbErr.stack);
-                  
-                  // Fall back to in-memory storage
-                  log("Falling back to in-memory storage");
-                }
-              }
-              
-              // Fallback: in-memory storage
-              log("Using in-memory storage for signup");
-              
-              // Check if user exists in memory
-              const existingUser = req.users.find(u => u.email === email);
-              if (existingUser) {
-                return res.status(409).json({ 
-                  status: "error", 
-                  message: "User with this email already exists" 
-                });
-              }
-              
-              // Create new user in memory
-              const newUser = {
-                id: req.users.length + 1,
-                username,
-                email,
-                password: hashedPassword,
-                location: location || { lat: null, lng: null }
-              };
-              
-              req.users.push(newUser);
-              
-              log(`User created in memory with ID: ${newUser.id}`);
-              return res.status(201).json({
-                status: "success",
-                message: "User created successfully (in-memory)",
-                user: {
-                  id: newUser.id,
-                  username,
-                  email
-                }
-              });
-            } catch (err) {
-              log(`Error in signup process: ${err.message}`);
-              log(err.stack);
-              return res.status(500).json({
-                status: "error",
-                message: "Server error during signup"
-              });
-            }
-          });
-          
-          // User login API
-          app.post("/api/login", async (req, res) => {
-            log("Login API hit");
-            
-            try {
-              const { email, password } = req.body;
-              
-              if (!email || !password) {
-                return res.status(400).json({ 
-                  status: "error", 
-                  message: "Missing email or password" 
-                });
-              }
-              
-              // Hash password for comparison
-              const hashedPassword = crypto
-                .createHash("sha256")
-                .update(password)
-                .digest("hex");
-              
-              if (req.dbConnected) {
-                try {
-                  const result = await req.db.request()
-                    .input("email", req.db.VarChar, email)
-                    .query("SELECT * FROM Users WHERE email = @email");
-                    
-                  if (result.recordset.length === 0) {
-                    return res.status(401).json({ 
-                      status: "error", 
-                      message: "Invalid email or password" 
-                    });
-                  }
-                  
-                  const user = result.recordset[0];
-                  
-                  if (user.password !== hashedPassword) {
-                    return res.status(401).json({ 
-                      status: "error", 
-                      message: "Invalid email or password" 
-                    });
-                  }
-                  
-                  log(`User ${user.id} logged in successfully`);
-                  return res.json({
-                    status: "success",
-                    message: "Login successful",
-                    user: {
-                      id: user.id,
-                      username: user.username,
-                      email: user.email
-                    }
-                  });
-                } catch (dbErr) {
-                  log(`Database error during login: ${dbErr.message}`);
-                  // Fall back to in-memory storage
-                }
-              }
-              
-              // Fallback: in-memory storage
-              const user = req.users.find(u => u.email === email);
-              
-              if (!user || user.password !== hashedPassword) {
-                return res.status(401).json({ 
-                  status: "error", 
-                  message: "Invalid email or password" 
-                });
-              }
-              
-              log(`User ${user.id} logged in successfully (in-memory)`);
-              return res.json({
-                status: "success",
-                message: "Login successful (in-memory)",
-                user: {
-                  id: user.id,
-                  username: user.username,
-                  email: user.email
-                }
-              });
-            } catch (err) {
-              log(`Error in login process: ${err.message}`);
-              return res.status(500).json({
-                status: "error",
-                message: "Server error during login"
-              });
-            }
-          });
-          
-          // User routes from previous implementation
-          app.get("/api/users", async (req, res) => {
-            log("GET /api/users endpoint hit");
-            
-            if (!req.dbConnected) {
-              log("Database not connected, returning mock data");
-              return res.json(req.users.map(({ password, ...user }) => user));
-            }
-            
-            try {
-              const result = await req.db.request().query("SELECT id, username, email FROM Users");
-              log(`Retrieved ${result.recordset.length} users from database`);
-              res.json(result.recordset);
-            } catch (err) {
-              log(`Error querying users: ${err.message}`);
-              res.status(500).json({
-                error: "Database error",
-                message: err.message
-              });
-            }
-          });
-          
-          app.get("/api/users/:id", async (req, res) => {
-            const userId = req.params.id;
-            log(`GET /api/users/${userId} endpoint hit`);
-            
-            if (!req.dbConnected) {
-              log("Database not connected, returning mock data");
-              const user = req.users.find(u => u.id === parseInt(userId));
-              
-              if (!user) {
-                return res.status(404).json({ error: "User not found" });
-              }
-              
-              const { password, ...userData } = user;
-              return res.json(userData);
-            }
-            
-            try {
-              const result = await req.db.request()
-                .input("id", req.db.Int, parseInt(userId))
-                .query("SELECT id, username, email FROM Users WHERE id = @id");
-                
-              if (result.recordset.length === 0) {
-                return res.status(404).json({ error: "User not found" });
-              }
-              
-              res.json(result.recordset[0]);
-            } catch (err) {
-              log(`Error querying user ${userId}: ${err.message}`);
-              res.status(500).json({
-                error: "Database error",
-                message: err.message
-              });
-            }
-          });
-          
-          // Load user routes from original code if available
-          try {
-            const userRoutes = require("./userRoutes");
-            log("Original user routes loaded successfully");
-            app.use("/api/users-original", userRoutes);
-          } catch (err) {
-            log(`Error loading original user routes: ${err.message}`);
-          }
           
           // Serve static frontend files
           const staticPath = path.resolve(__dirname);
@@ -551,12 +330,12 @@ jobs:
           
           // Start the server
           app.listen(PORT, () => {
-            log(`Enhanced app running on port ${PORT}`);
+            log(`Debug app running on port ${PORT}`);
           });
           EOL
           
           # Update package.json
-          node -e "const pkg = require('./package.json'); pkg.main = 'enhanced-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node enhanced-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
+          node -e "const pkg = require('./package.json'); pkg.main = 'debug-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node debug-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
 
       # Create web.config for Azure
       - name: Create web.config for Azure
@@ -567,21 +346,17 @@ jobs:
           <configuration>
             <system.webServer>
               <handlers>
-                <add name="iisnode" path="enhanced-app.js" verb="*" modules="iisnode" />
+                <add name="iisnode" path="debug-app.js" verb="*" modules="iisnode" />
               </handlers>
               <rewrite>
                 <rules>
                   <rule name="API">
                     <match url="api/*" />
-                    <action type="Rewrite" url="enhanced-app.js" />
+                    <action type="Rewrite" url="debug-app.js" />
                   </rule>
                   <rule name="Health">
                     <match url="health" />
-                    <action type="Rewrite" url="enhanced-app.js" />
-                  </rule>
-                  <rule name="API Test">
-                    <match url="api-test" />
-                    <action type="Rewrite" url="enhanced-app.js" />
+                    <action type="Rewrite" url="debug-app.js" />
                   </rule>
                   <rule name="StaticContent">
                     <match url="(.*)" />
@@ -595,7 +370,7 @@ jobs:
                     <conditions>
                       <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
                     </conditions>
-                    <action type="Rewrite" url="enhanced-app.js" />
+                    <action type="Rewrite" url="debug-app.js" />
                   </rule>
                 </rules>
               </rewrite>
