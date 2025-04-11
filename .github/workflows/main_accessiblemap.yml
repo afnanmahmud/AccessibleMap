@@ -64,17 +64,18 @@ jobs:
         run: |
           cp -r ./dist/* ./server/dist/ || echo "No frontend files to copy"
 
-      # Create robust app with database connection
-      - name: Create robust app with DB connection
+      # Create enhanced app with full API support
+      - name: Create enhanced app with API support
         working-directory: ./server/dist
         run: |
-          cat > robust-app.js << 'EOL'
+          cat > enhanced-app.js << 'EOL'
           const express = require("express");
           const helmet = require("helmet");
           const compression = require("compression");
           const cors = require("cors");
           const path = require("path");
           const fs = require("fs");
+          const crypto = require("crypto");
           
           // Create log directory
           const logDir = path.join(__dirname, "logs");
@@ -110,7 +111,7 @@ jobs:
             // Don't exit the process
           });
           
-          log("Starting robust app with DB connection...");
+          log("Starting enhanced app with full API support...");
           
           const app = express();
           const PORT = process.env.PORT || 8080;
@@ -132,6 +133,12 @@ jobs:
           // Database connection state
           let dbConnected = false;
           let dbConnection = null;
+          
+          // In-memory user storage (fallback when DB is unavailable)
+          const users = [
+            { id: 1, username: "user1", email: "user1@example.com", password: "hashedpassword1", location: { lat: 40.7128, lng: -74.0060 } },
+            { id: 2, username: "user2", email: "user2@example.com", password: "hashedpassword2", location: { lat: 34.0522, lng: -118.2437 } }
+          ];
           
           // Database connection function with retry
           const connectToDatabase = async (retryCount = 0) => {
@@ -203,6 +210,7 @@ jobs:
           app.use((req, res, next) => {
             req.db = dbConnection;
             req.dbConnected = dbConnected;
+            req.users = users; // Fallback user data
             next();
           });
           
@@ -228,20 +236,236 @@ jobs:
             });
           });
           
-          // User routes with DB fallback
+          // Add geolocation fallback API
+          app.get("/api/geolocation", (req, res) => {
+            log("Geolocation fallback API hit");
+            // Return a default location (New York City)
+            res.json({
+              status: "success",
+              location: {
+                latitude: 40.7128,
+                longitude: -74.0060,
+                accuracy: 1000,
+                source: "mock"
+              }
+            });
+          });
+          
+          // User signup API
+          app.post("/api/signup", async (req, res) => {
+            log("Signup API hit");
+            log(`Request body: ${JSON.stringify(req.body)}`);
+            
+            try {
+              const { username, email, password, location } = req.body;
+              
+              if (!username || !email || !password) {
+                return res.status(400).json({ 
+                  status: "error", 
+                  message: "Missing required fields" 
+                });
+              }
+              
+              // Simple email validation
+              if (!email.includes("@")) {
+                return res.status(400).json({ 
+                  status: "error", 
+                  message: "Invalid email format" 
+                });
+              }
+              
+              // Hash password (simple version)
+              const hashedPassword = crypto
+                .createHash("sha256")
+                .update(password)
+                .digest("hex");
+              
+              if (req.dbConnected) {
+                log("Attempting to save user to database");
+                try {
+                  // Check if user already exists
+                  const userCheck = await req.db.request()
+                    .input("email", req.db.VarChar, email)
+                    .query("SELECT * FROM Users WHERE email = @email");
+                    
+                  if (userCheck.recordset.length > 0) {
+                    return res.status(409).json({ 
+                      status: "error", 
+                      message: "User with this email already exists" 
+                    });
+                  }
+                  
+                  // Insert new user
+                  const result = await req.db.request()
+                    .input("username", req.db.VarChar, username)
+                    .input("email", req.db.VarChar, email)
+                    .input("password", req.db.VarChar, hashedPassword)
+                    .input("latitude", req.db.Float, location?.latitude || null)
+                    .input("longitude", req.db.Float, location?.longitude || null)
+                    .query("INSERT INTO Users (username, email, password, latitude, longitude) VALUES (@username, @email, @password, @latitude, @longitude); SELECT SCOPE_IDENTITY() AS id");
+                  
+                  const userId = result.recordset[0].id;
+                  
+                  log(`User created successfully with ID: ${userId}`);
+                  return res.status(201).json({
+                    status: "success",
+                    message: "User created successfully",
+                    user: {
+                      id: userId,
+                      username,
+                      email
+                    }
+                  });
+                } catch (dbErr) {
+                  log(`Database error during signup: ${dbErr.message}`);
+                  log(dbErr.stack);
+                  
+                  // Fall back to in-memory storage
+                  log("Falling back to in-memory storage");
+                }
+              }
+              
+              // Fallback: in-memory storage
+              log("Using in-memory storage for signup");
+              
+              // Check if user exists in memory
+              const existingUser = req.users.find(u => u.email === email);
+              if (existingUser) {
+                return res.status(409).json({ 
+                  status: "error", 
+                  message: "User with this email already exists" 
+                });
+              }
+              
+              // Create new user in memory
+              const newUser = {
+                id: req.users.length + 1,
+                username,
+                email,
+                password: hashedPassword,
+                location: location || { lat: null, lng: null }
+              };
+              
+              req.users.push(newUser);
+              
+              log(`User created in memory with ID: ${newUser.id}`);
+              return res.status(201).json({
+                status: "success",
+                message: "User created successfully (in-memory)",
+                user: {
+                  id: newUser.id,
+                  username,
+                  email
+                }
+              });
+            } catch (err) {
+              log(`Error in signup process: ${err.message}`);
+              log(err.stack);
+              return res.status(500).json({
+                status: "error",
+                message: "Server error during signup"
+              });
+            }
+          });
+          
+          // User login API
+          app.post("/api/login", async (req, res) => {
+            log("Login API hit");
+            
+            try {
+              const { email, password } = req.body;
+              
+              if (!email || !password) {
+                return res.status(400).json({ 
+                  status: "error", 
+                  message: "Missing email or password" 
+                });
+              }
+              
+              // Hash password for comparison
+              const hashedPassword = crypto
+                .createHash("sha256")
+                .update(password)
+                .digest("hex");
+              
+              if (req.dbConnected) {
+                try {
+                  const result = await req.db.request()
+                    .input("email", req.db.VarChar, email)
+                    .query("SELECT * FROM Users WHERE email = @email");
+                    
+                  if (result.recordset.length === 0) {
+                    return res.status(401).json({ 
+                      status: "error", 
+                      message: "Invalid email or password" 
+                    });
+                  }
+                  
+                  const user = result.recordset[0];
+                  
+                  if (user.password !== hashedPassword) {
+                    return res.status(401).json({ 
+                      status: "error", 
+                      message: "Invalid email or password" 
+                    });
+                  }
+                  
+                  log(`User ${user.id} logged in successfully`);
+                  return res.json({
+                    status: "success",
+                    message: "Login successful",
+                    user: {
+                      id: user.id,
+                      username: user.username,
+                      email: user.email
+                    }
+                  });
+                } catch (dbErr) {
+                  log(`Database error during login: ${dbErr.message}`);
+                  // Fall back to in-memory storage
+                }
+              }
+              
+              // Fallback: in-memory storage
+              const user = req.users.find(u => u.email === email);
+              
+              if (!user || user.password !== hashedPassword) {
+                return res.status(401).json({ 
+                  status: "error", 
+                  message: "Invalid email or password" 
+                });
+              }
+              
+              log(`User ${user.id} logged in successfully (in-memory)`);
+              return res.json({
+                status: "success",
+                message: "Login successful (in-memory)",
+                user: {
+                  id: user.id,
+                  username: user.username,
+                  email: user.email
+                }
+              });
+            } catch (err) {
+              log(`Error in login process: ${err.message}`);
+              return res.status(500).json({
+                status: "error",
+                message: "Server error during login"
+              });
+            }
+          });
+          
+          // User routes from previous implementation
           app.get("/api/users", async (req, res) => {
             log("GET /api/users endpoint hit");
             
             if (!req.dbConnected) {
               log("Database not connected, returning mock data");
-              return res.json([
-                { id: 1, name: "Test User 1 (Mock)", email: "user1@example.com" },
-                { id: 2, name: "Test User 2 (Mock)", email: "user2@example.com" }
-              ]);
+              return res.json(req.users.map(({ password, ...user }) => user));
             }
             
             try {
-              const result = await req.db.request().query("SELECT * FROM Users");
+              const result = await req.db.request().query("SELECT id, username, email FROM Users");
               log(`Retrieved ${result.recordset.length} users from database`);
               res.json(result.recordset);
             } catch (err) {
@@ -259,17 +483,20 @@ jobs:
             
             if (!req.dbConnected) {
               log("Database not connected, returning mock data");
-              return res.json({ 
-                id: parseInt(userId), 
-                name: `Test User ${userId} (Mock)`, 
-                email: `user${userId}@example.com` 
-              });
+              const user = req.users.find(u => u.id === parseInt(userId));
+              
+              if (!user) {
+                return res.status(404).json({ error: "User not found" });
+              }
+              
+              const { password, ...userData } = user;
+              return res.json(userData);
             }
             
             try {
               const result = await req.db.request()
                 .input("id", req.db.Int, parseInt(userId))
-                .query("SELECT * FROM Users WHERE id = @id");
+                .query("SELECT id, username, email FROM Users WHERE id = @id");
                 
               if (result.recordset.length === 0) {
                 return res.status(404).json({ error: "User not found" });
@@ -324,12 +551,12 @@ jobs:
           
           // Start the server
           app.listen(PORT, () => {
-            log(`Robust app running on port ${PORT}`);
+            log(`Enhanced app running on port ${PORT}`);
           });
           EOL
           
           # Update package.json
-          node -e "const pkg = require('./package.json'); pkg.main = 'robust-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node robust-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
+          node -e "const pkg = require('./package.json'); pkg.main = 'enhanced-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node enhanced-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
 
       # Create web.config for Azure
       - name: Create web.config for Azure
@@ -340,21 +567,21 @@ jobs:
           <configuration>
             <system.webServer>
               <handlers>
-                <add name="iisnode" path="robust-app.js" verb="*" modules="iisnode" />
+                <add name="iisnode" path="enhanced-app.js" verb="*" modules="iisnode" />
               </handlers>
               <rewrite>
                 <rules>
                   <rule name="API">
                     <match url="api/*" />
-                    <action type="Rewrite" url="robust-app.js" />
+                    <action type="Rewrite" url="enhanced-app.js" />
                   </rule>
                   <rule name="Health">
                     <match url="health" />
-                    <action type="Rewrite" url="robust-app.js" />
+                    <action type="Rewrite" url="enhanced-app.js" />
                   </rule>
                   <rule name="API Test">
                     <match url="api-test" />
-                    <action type="Rewrite" url="robust-app.js" />
+                    <action type="Rewrite" url="enhanced-app.js" />
                   </rule>
                   <rule name="StaticContent">
                     <match url="(.*)" />
@@ -368,7 +595,7 @@ jobs:
                     <conditions>
                       <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
                     </conditions>
-                    <action type="Rewrite" url="robust-app.js" />
+                    <action type="Rewrite" url="enhanced-app.js" />
                   </rule>
                 </rules>
               </rewrite>
