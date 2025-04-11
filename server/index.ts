@@ -4,6 +4,7 @@ import compression from 'compression';
 import cors from 'cors';
 import { connectToDatabase } from './config/db';
 import userRoutes from './userRoutes';
+import path from 'path';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -19,7 +20,7 @@ app.use(cors({
 app.use(express.json());
 
 // Serve static frontend files (from dist folder)
-app.use(express.static('../../dist'));
+app.use(express.static(path.join(__dirname, '..', '..', 'dist')));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -31,7 +32,7 @@ app.use('/api/users', userRoutes);
 
 // Catch-all route to serve frontend (SPA routing)
 app.get('*', (req, res) => {
-  res.sendFile('index.html', { root: '../../dist' });
+  res.sendFile(path.join(__dirname, '..', '..', 'dist', 'index.html'));
 });
 
 // Start the server
