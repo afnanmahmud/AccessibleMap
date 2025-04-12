@@ -1,13 +1,43 @@
 import React, { useState, CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 const LoginForm: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Login submitted with:', email, password);
+    setError('');
+    setLoading(true);
+    
+    try {
+      // Call the backend API
+      const response = await axios.post('/api/login', {
+        email,
+        password
+      });
+      
+      // Check if login was successful
+      if (response.data.success) {
+        // Store user data in localStorage or sessionStorage
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+        
+        // Redirect to map page
+        navigate('/map');
+      } else {
+        setError(response.data.message || 'Login failed');
+      }
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError(err.response?.data?.message || 'Login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const styles: Record<string, CSSProperties> = {
@@ -88,7 +118,9 @@ const LoginForm: React.FC = () => {
       marginBottom: '50px',
       marginLeft: 'auto',
       marginRight: 'auto',
-      display: 'block'
+      display: 'block',
+      opacity: loading ? 0.7 : 1,
+      pointerEvents: loading ? 'none' : 'auto',
     },
     altLoginText: {
       color: '#6b7280',
@@ -121,6 +153,12 @@ const LoginForm: React.FC = () => {
       color: '#2563eb',
       textDecoration: 'none',
       fontWeight: 'bold'
+    },
+    errorMessage: {
+      color: '#ef4444',
+      marginBottom: '15px',
+      fontSize: '14px',
+      textAlign: 'center' as const
     }
   };
 
@@ -137,6 +175,9 @@ const LoginForm: React.FC = () => {
         {/* Login header */}
         <h1 style={styles.header}>Log In</h1>
         
+        {/* Error message display */}
+        {error && <div style={styles.errorMessage}>{error}</div>}
+        
         {/* Login form */}
         <form style={{width: '100%'}} onSubmit={handleSubmit}>
           {/* Email field */}
@@ -151,6 +192,7 @@ const LoginForm: React.FC = () => {
                 placeholder="Email"
                 style={styles.input}
                 required
+                disabled={loading}
               />
             </div>
           </div>
@@ -167,26 +209,27 @@ const LoginForm: React.FC = () => {
                 placeholder="Password"
                 style={styles.input}
                 required
+                disabled={loading}
               />
             </div>
           </div>
           
           {/* Sign in button */}
           <div style={{width: '100%', textAlign: 'center' as const}}>
-            <button type="submit" style={styles.submitButton}>
-              Sign in
+            <button type="submit" style={styles.submitButton} disabled={loading}>
+              {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </div>
         </form>
         
         {/* Alternative login */}
         <p style={styles.altLoginText}>Or sign in with</p>
-        <button style={styles.ksuButton}>KSU NetID</button>
+        <button style={styles.ksuButton} disabled={loading}>KSU NetID</button>
         
         {/* Sign up link */}
         <div style={styles.signupContainer}>
           <p style={styles.signupText}>
-            Already have an account?{' '}
+            Don't have an account?{' '}
             <Link to="/signup" style={styles.link}>Sign up</Link>
           </p>
         </div>
