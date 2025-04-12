@@ -117,6 +117,7 @@ const MapSearch: React.FC<MapSearchProps> = ({ onStartChange, onEndChange, onSub
             onChange={handleStartChange}
             placeholder="Start"
             className="map-search-input start-input"
+            aria-label = "Enter start location"
           />
           {showStartSuggestions && startSuggestions.length > 0 && (
             <div className="suggestions-dropdown">
@@ -146,6 +147,7 @@ const MapSearch: React.FC<MapSearchProps> = ({ onStartChange, onEndChange, onSub
             onChange={handleEndChange}
             placeholder="End"
             className="map-search-input end-input"
+            aria-label = "Enter end location"
           />
           {showEndSuggestions && endSuggestions.length > 0 && (
             <div className="suggestions-dropdown">
@@ -163,10 +165,10 @@ const MapSearch: React.FC<MapSearchProps> = ({ onStartChange, onEndChange, onSub
         </div>
       </div>
       <div className="button-group">
-        <button onClick={onSubmit} className="map-search-button">
+        <button onClick={onSubmit} className="map-search-button" aria-label = "Start routing">
           Start
         </button>
-        <button className="bookmark-button">
+        <button className="bookmark-button" aria-label = "Open bookmarked routes">
           <svg
             width="24"
             height="24"
@@ -181,7 +183,7 @@ const MapSearch: React.FC<MapSearchProps> = ({ onStartChange, onEndChange, onSub
           </svg>
         </button>
         <div className="menu-button-container" ref={dropdownRef}>
-          <button className="menu-button" onClick={toggleDropdown}>
+          <button className="menu-button" onClick={toggleDropdown} aria-label = "Menu">
             <svg
               width="24"
               height="24"
