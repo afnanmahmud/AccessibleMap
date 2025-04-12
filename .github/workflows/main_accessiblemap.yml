@@ -64,18 +64,25 @@ jobs:
         run: |
           cp -r ./dist/* ./server/dist/ || echo "No frontend files to copy"
 
-      # Create debug SQL app
-      - name: Create debug SQL app
+      # Create production app
+      - name: Create production app
         working-directory: ./server/dist
         run: |
-          cat > debug-sql-app.js << 'EOL'
+          cat > production-app.js << 'EOL'
+          /**
+           * AccessibleMap Production Server
+           * 
+           * This is the main server application for the AccessibleMap project.
+           * It serves the frontend React application and provides API endpoints
+           * for user authentication and map data.
+           */
+          
           const express = require("express");
           const helmet = require("helmet");
           const compression = require("compression");
           const cors = require("cors");
           const path = require("path");
           const fs = require("fs");
-          const util = require("util");
           const crypto = require("crypto");
           
           // Create log directory
@@ -84,89 +91,85 @@ jobs:
             fs.mkdirSync(logDir);
           }
           
-          // Setup logging
-          const logFile = path.join(logDir, "sql-debug.log");
-          const log = (...args) => {
-            const message = args.map(arg => 
-              typeof arg === "object" ? util.inspect(arg, { depth: null }) : arg
-            ).join(" ");
-            const timestamp = new Date().toISOString();
-            const logMessage = `${timestamp}: ${message}\n`;
-            console.log(message);
-            try {
-              fs.appendFileSync(logFile, logMessage);
-            } catch (err) {
-              console.error("Failed to write to log file:", err);
+          // Setup server logging
+          const logFile = path.join(logDir, "app.log");
+          const logger = {
+            info: (...args) => {
+              const message = args.join(" ");
+              const timestamp = new Date().toISOString();
+              const logMessage = `[INFO] ${timestamp}: ${message}\n`;
+              console.log(message);
+              try {
+                fs.appendFileSync(logFile, logMessage);
+              } catch (err) {
+                console.error("Failed to write to log file:", err);
+              }
+            },
+            error: (...args) => {
+              const message = args.join(" ");
+              const timestamp = new Date().toISOString();
+              const logMessage = `[ERROR] ${timestamp}: ${message}\n`;
+              console.error(message);
+              try {
+                fs.appendFileSync(logFile, logMessage);
+              } catch (err) {
+                console.error("Failed to write to log file:", err);
+              }
             }
           };
           
-          // Global error handler
+          // Global error handlers
           process.on("uncaughtException", (err) => {
-            log(`UNCAUGHT EXCEPTION: ${err.message}`);
-            log(err.stack);
+            logger.error(`Uncaught Exception: ${err.message}`, err.stack);
           });
           
-          process.on("unhandledRejection", (reason, promise) => {
-            log(`UNHANDLED REJECTION: ${reason}`);
+          process.on("unhandledRejection", (reason) => {
+            logger.error(`Unhandled Rejection: ${reason}`);
           });
           
-          log("Starting SQL debugging app...");
+          logger.info("Starting AccessibleMap production server...");
           
           const app = express();
           const PORT = process.env.PORT || 8080;
           
-          // Middleware
+          // Apply middleware
           app.use(helmet({
-            contentSecurityPolicy: false
+            contentSecurityPolicy: false // Disabled for simplicity, consider enabling in production
           }));
           app.use(compression());
           app.use(cors({
-            origin: "*",
+            origin: "*", // Consider restricting to specific domains in production
             methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             credentials: true
           }));
-          
-          // Body parsing - accept various formats
           app.use(express.json());
           app.use(express.urlencoded({ extended: true }));
-          
-          // Log all requests
-          app.use((req, res, next) => {
-            log(`REQUEST: ${req.method} ${req.url}`);
-            if (req.body && Object.keys(req.body).length > 0) {
-              log(`BODY: ${util.inspect(req.body)}`);
-            }
-            next();
-          });
           
           // Database connection
           let db = null;
           let dbConnected = false;
-          let sql = null; // Store SQL module
+          let sql = null;
           
-          // In-memory fallback
+          // In-memory fallback (for when database is unavailable)
           const users = [];
           
-          // Connect to database
-          const connectDatabase = async () => {
+          /**
+           * Connects to the database and initializes the connection pool
+           * @returns {Promise<boolean>} True if connected successfully, false otherwise
+           */
+          const connectToDatabase = async () => {
             try {
               const DB_HOST = process.env.DB_HOST;
               const DB_USER = process.env.DB_USER;
               const DB_PASS = process.env.DB_PASS;
               const DB_NAME = process.env.DB_NAME;
               
-              log("Database connection parameters:");
-              log(`DB_HOST: ${DB_HOST}`);
-              log(`DB_USER: ${DB_USER}`);
-              log(`DB_NAME: ${DB_NAME}`);
-              log(`DB_PASS: ${DB_PASS ? "[REDACTED]" : "Missing"}`);
-              
               if (!DB_HOST || !DB_USER || !DB_PASS || !DB_NAME) {
-                log("ERROR: Missing database credentials");
+                logger.error("Missing database credentials");
                 return false;
               }
               
-              // Require mssql here to avoid dependency issues if not available
+              // Import SQL module
               sql = require('mssql');
               
               const config = {
@@ -181,55 +184,29 @@ jobs:
                 }
               };
               
-              log("Attempting to connect to database...");
+              logger.info(`Connecting to database ${DB_NAME} on ${DB_HOST}...`);
               const pool = await sql.connect(config);
-              log("Database connection successful!");
-              
-              // Verify that Users table exists
-              const tableCheck = await pool.request().query(`
-                SELECT OBJECT_ID('dbo.Users') as TableID
-              `);
-              
-              if (!tableCheck.recordset[0].TableID) {
-                log("ERROR: Users table does not exist in the database");
-                return false;
-              }
-              
-              log("Users table found in database");
-              
-              // Get Users table structure
-              const tableStructure = await pool.request().query(`
-                SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_NAME = 'Users'
-                ORDER BY ORDINAL_POSITION
-              `);
-              
-              log("Users table structure:");
-              tableStructure.recordset.forEach(col => {
-                log(`- ${col.COLUMN_NAME}: ${col.DATA_TYPE}${col.CHARACTER_MAXIMUM_LENGTH ? `(${col.CHARACTER_MAXIMUM_LENGTH})` : ''}`);
-              });
+              logger.info("Database connection successful");
               
               db = pool;
               dbConnected = true;
               return true;
             } catch (err) {
-              log(`Database connection error: ${err.message}`);
-              log(err.stack);
+              logger.error(`Database connection error: ${err.message}`);
               return false;
             }
           };
           
-          // Initialize database
-          connectDatabase().then(success => {
+          // Initialize database connection
+          connectToDatabase().then(success => {
             if (success) {
-              log("Database connection established");
+              logger.info("Database connection established");
             } else {
-              log("Database connection failed, falling back to in-memory storage");
+              logger.error("Database connection failed, using in-memory storage as fallback");
             }
           });
           
-          // Add database access middleware
+          // Middleware to add db access to requests
           app.use((req, res, next) => {
             req.db = db;
             req.dbConnected = dbConnected;
@@ -238,103 +215,33 @@ jobs:
             next();
           });
           
-          // Direct SQL query endpoint for testing
-          app.post('/api/sql-test', async (req, res) => {
-            log('SQL test endpoint hit');
-            
-            if (!req.dbConnected) {
-              return res.status(503).json({
-                success: false,
-                message: 'Database not connected'
-              });
-            }
-            
-            try {
-              const { query, parameters } = req.body;
-              
-              if (!query) {
-                return res.status(400).json({
-                  success: false,
-                  message: 'Query is required'
-                });
-              }
-              
-              log(`Executing SQL query: ${query}`);
-              log(`With parameters: ${util.inspect(parameters || {})}`);
-              
-              // Build the request with parameters
-              const request = req.db.request();
-              
-              if (parameters) {
-                Object.keys(parameters).forEach(key => {
-                  const value = parameters[key];
-                  // Dynamically determine SQL type (basic types only)
-                  if (typeof value === 'number') {
-                    if (Number.isInteger(value)) {
-                      request.input(key, req.sql.Int, value);
-                    } else {
-                      request.input(key, req.sql.Float, value);
-                    }
-                  } else if (typeof value === 'string') {
-                    request.input(key, req.sql.NVarChar, value);
-                  } else if (value instanceof Date) {
-                    request.input(key, req.sql.DateTime, value);
-                  } else if (typeof value === 'boolean') {
-                    request.input(key, req.sql.Bit, value);
-                  } else {
-                    // For null or undefined
-                    request.input(key, req.sql.NVarChar, value);
-                  }
-                });
-              }
-              
-              const result = await request.query(query);
-              return res.json({
-                success: true,
-                message: 'Query executed successfully',
-                recordsets: result.recordsets,
-                rowsAffected: result.rowsAffected
-              });
-            } catch (err) {
-              log(`SQL test error: ${err.message}`);
-              return res.status(500).json({
-                success: false,
-                message: 'SQL query failed',
-                error: err.message
-              });
-            }
-          });
+          // ----- API Routes -----
           
-          // Signup endpoint with verbose SQL debugging
+          // Signup endpoint
           app.post('/api/signup', async (req, res) => {
-            log('Signup endpoint hit');
-            
             try {
-              // Extract data - be flexible with field names
-              const body = req.body;
+              // Extract user data
+              const { email, password } = req.body;
+              let firstName = req.body.first_name || req.body.firstName || req.body.firstname;
+              let lastName = req.body.last_name || req.body.lastName || req.body.lastname;
               
-              // Check for required fields according to your schema
-              const email = body.email || body.mail;
-              const password = body.password || body.pass;
-              let firstName = body.first_name || body.firstName || body.firstname;
-              let lastName = body.last_name || body.lastName || body.lastname;
-              
-              // If username is provided but not first/last name, split it
-              if ((!firstName || !lastName) && body.username) {
-                const parts = body.username.split(' ');
+              // Handle username if provided instead of first/last name
+              if ((!firstName || !lastName) && req.body.username) {
+                const parts = req.body.username.split(' ');
                 if (parts.length >= 2) {
                   firstName = firstName || parts[0];
                   lastName = lastName || parts.slice(1).join(' ');
                 } else {
-                  firstName = firstName || body.username;
+                  firstName = firstName || req.body.username;
                   lastName = lastName || '';
                 }
               }
               
-              // Final fallbacks
+              // Default values
               firstName = firstName || 'Default';
               lastName = lastName || 'User';
               
+              // Validation
               if (!email) {
                 return res.status(400).json({
                   success: false,
@@ -349,8 +256,6 @@ jobs:
                 });
               }
               
-              log(`Processing signup: email=${email}, firstName=${firstName}, lastName=${lastName}`);
-              
               // Hash password
               const passwordHash = crypto
                 .createHash('sha256')
@@ -359,91 +264,36 @@ jobs:
               
               if (req.dbConnected) {
                 try {
-                  log("Checking if user exists in database...");
-                  
-                  // Check query - with trace logging
-                  const checkQuery = 'SELECT * FROM Users WHERE email = @email';
-                  log(`Check query: ${checkQuery}`);
-                  
-                  // Build check request
-                  const checkRequest = req.db.request();
-                  checkRequest.input('email', req.sql.NVarChar(100), email);
-                  
-                  log(`Check parameters: email=${email}`);
-                  
-                  // Execute check
-                  const userCheck = await checkRequest.query(checkQuery);
-                  
-                  log(`Check result: ${util.inspect(userCheck.recordset)}`);
+                  // Check if user already exists
+                  const userCheck = await req.db.request()
+                    .input('email', req.sql.NVarChar(100), email)
+                    .query('SELECT * FROM Users WHERE email = @email');
                   
                   if (userCheck.recordset && userCheck.recordset.length > 0) {
-                    log(`User with email ${email} already exists`);
                     return res.status(409).json({
                       success: false,
                       message: 'User with this email already exists'
                     });
                   }
                   
-                  log("User doesn't exist, creating new user in database...");
-                  
-                  // Insert query - with trace logging
-                  const insertQuery = `
-                    INSERT INTO Users (email, password_hash, first_name, last_name)
-                    OUTPUT INSERTED.user_id
-                    VALUES (@email, @password_hash, @first_name, @last_name)
-                  `;
-                  log(`Insert query: ${insertQuery}`);
-                  
-                  // Build insert request
-                  const insertRequest = req.db.request();
-                  insertRequest.input('email', req.sql.NVarChar(100), email);
-                  insertRequest.input('password_hash', req.sql.NVarChar(255), passwordHash);
-                  insertRequest.input('first_name', req.sql.NVarChar(100), firstName);
-                  insertRequest.input('last_name', req.sql.NVarChar(100), lastName);
-                  
-                  log(`Insert parameters: email=${email}, password_hash=[REDACTED], first_name=${firstName}, last_name=${lastName}`);
-                  
-                  // Execute insert
-                  const result = await insertRequest.query(insertQuery);
-                  
-                  log(`Insert result: ${util.inspect(result)}`);
-                  
-                  if (!result.recordset || result.recordset.length === 0) {
-                    log('Insert succeeded but no user_id was returned');
-                    
-                    // Try to get the user_id with a separate query
-                    const getUserIdQuery = 'SELECT user_id FROM Users WHERE email = @email';
-                    const getUserIdRequest = req.db.request();
-                    getUserIdRequest.input('email', req.sql.NVarChar(100), email);
-                    
-                    const getUserIdResult = await getUserIdRequest.query(getUserIdQuery);
-                    
-                    if (getUserIdResult.recordset && getUserIdResult.recordset.length > 0) {
-                      const userId = getUserIdResult.recordset[0].user_id;
-                      log(`Retrieved user_id ${userId} in separate query`);
-                      
-                      return res.status(201).json({
-                        success: true,
-                        message: 'User created successfully in database',
-                        user: {
-                          id: userId,
-                          email,
-                          firstName,
-                          lastName
-                        }
-                      });
-                    } else {
-                      log('Could not retrieve user_id even with separate query');
-                      throw new Error('Failed to get user_id after insert');
-                    }
-                  }
+                  // Create new user
+                  const result = await req.db.request()
+                    .input('email', req.sql.NVarChar(100), email)
+                    .input('password_hash', req.sql.NVarChar(255), passwordHash)
+                    .input('first_name', req.sql.NVarChar(100), firstName)
+                    .input('last_name', req.sql.NVarChar(100), lastName)
+                    .query(`
+                      INSERT INTO Users (email, password_hash, first_name, last_name)
+                      VALUES (@email, @password_hash, @first_name, @last_name);
+                      SELECT SCOPE_IDENTITY() AS user_id;
+                    `);
                   
                   const userId = result.recordset[0].user_id;
-                  log(`User created in database with ID: ${userId}`);
+                  logger.info(`User created in database with ID: ${userId}`);
                   
                   return res.status(201).json({
                     success: true,
-                    message: 'User created successfully in database',
+                    message: 'User created successfully',
                     user: {
                       id: userId,
                       email,
@@ -452,34 +302,14 @@ jobs:
                     }
                   });
                 } catch (dbErr) {
-                  log(`Database error: ${dbErr.message}`);
-                  log(dbErr.stack);
+                  logger.error(`Database error during signup: ${dbErr.message}`);
                   
-                  // Get detailed SQL error information if available
-                  if (dbErr.precedingErrors) {
-                    log(`SQL preceding errors: ${util.inspect(dbErr.precedingErrors)}`);
-                  }
-                  
-                  if (dbErr.number) {
-                    log(`SQL error number: ${dbErr.number}`);
-                  }
-                  
-                  if (dbErr.state) {
-                    log(`SQL error state: ${dbErr.state}`);
-                  }
-                  
-                  if (dbErr.code) {
-                    log(`SQL error code: ${dbErr.code}`);
-                  }
-                  
-                  // Fall back to in-memory
-                  log("Falling back to in-memory storage due to database error");
+                  // Fall back to in-memory storage
+                  logger.info("Falling back to in-memory storage");
                 }
-              } else {
-                log("Database not connected, using in-memory storage");
               }
               
-              // In-memory fallback
+              // In-memory fallback (only used if database is unavailable)
               const userId = users.length + 1;
               users.push({
                 user_id: userId,
@@ -489,10 +319,10 @@ jobs:
                 last_name: lastName
               });
               
-              log(`User created in memory with ID: ${userId}`);
+              logger.info(`User created in memory with ID: ${userId}`);
               return res.status(201).json({
                 success: true,
-                message: 'User created successfully (in-memory storage)',
+                message: 'User created successfully (note: using fallback storage)',
                 user: {
                   id: userId,
                   email,
@@ -501,23 +331,20 @@ jobs:
                 }
               });
             } catch (err) {
-              log(`Error in signup process: ${err.message}`);
-              log(err.stack);
+              logger.error(`Error in signup process: ${err.message}`);
               return res.status(500).json({
                 success: false,
-                message: 'Server error during signup',
-                error: err.message
+                message: 'Server error during signup'
               });
             }
           });
           
           // Login endpoint
           app.post('/api/login', async (req, res) => {
-            log('Login endpoint hit');
-            
             try {
               const { email, password } = req.body;
               
+              // Validation
               if (!email || !password) {
                 return res.status(400).json({
                   success: false,
@@ -553,7 +380,7 @@ jobs:
                     });
                   }
                   
-                  log(`User ${user.user_id} logged in successfully`);
+                  logger.info(`User ${user.user_id} logged in successfully`);
                   return res.json({
                     success: true,
                     message: 'Login successful',
@@ -565,7 +392,7 @@ jobs:
                     }
                   });
                 } catch (dbErr) {
-                  log(`Database error during login: ${dbErr.message}`);
+                  logger.error(`Database error during login: ${dbErr.message}`);
                   // Fall back to in-memory
                 }
               }
@@ -580,10 +407,10 @@ jobs:
                 });
               }
               
-              log(`User ${user.user_id} logged in successfully (from memory)`);
+              logger.info(`User ${user.user_id} logged in successfully (from memory)`);
               return res.json({
                 success: true,
-                message: 'Login successful (from in-memory storage)',
+                message: 'Login successful',
                 user: {
                   id: user.user_id,
                   email: user.email,
@@ -592,7 +419,7 @@ jobs:
                 }
               });
             } catch (err) {
-              log(`Error in login process: ${err.message}`);
+              logger.error(`Error in login process: ${err.message}`);
               return res.status(500).json({
                 success: false,
                 message: 'Server error during login'
@@ -600,156 +427,22 @@ jobs:
             }
           });
           
-          // Check table structure
-          app.get('/api/table-check', async (req, res) => {
-            log('Table check endpoint hit');
-            
-            if (!req.dbConnected) {
-              return res.status(503).json({
-                success: false,
-                message: 'Database not connected'
-              });
-            }
-            
-            try {
-              // Get all tables
-              const tablesResult = await req.db.request().query(`
-                SELECT TABLE_NAME 
-                FROM INFORMATION_SCHEMA.TABLES 
-                WHERE TABLE_TYPE = 'BASE TABLE'
-              `);
-              
-              const tables = tablesResult.recordset.map(r => r.TABLE_NAME);
-              
-              // Get Users table structure
-              const usersStructureResult = await req.db.request().query(`
-                SELECT 
-                  COLUMN_NAME, 
-                  DATA_TYPE, 
-                  CHARACTER_MAXIMUM_LENGTH,
-                  IS_NULLABLE,
-                  COLUMN_DEFAULT
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_NAME = 'Users'
-                ORDER BY ORDINAL_POSITION
-              `);
-              
-              // Get primary key info
-              const pkResult = await req.db.request().query(`
-                SELECT 
-                  COLUMN_NAME
-                FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS TC
-                INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS KCU
-                  ON TC.CONSTRAINT_TYPE = 'PRIMARY KEY' 
-                  AND TC.CONSTRAINT_NAME = KCU.CONSTRAINT_NAME
-                  AND KCU.TABLE_NAME='Users'
-              `);
-              
-              const primaryKeys = pkResult.recordset.map(r => r.COLUMN_NAME);
-              
-              return res.json({
-                success: true,
-                tables,
-                usersTable: usersStructureResult.recordset,
-                primaryKeys,
-                message: 'Table structure retrieved successfully'
-              });
-            } catch (err) {
-              log(`Table check error: ${err.message}`);
-              return res.status(500).json({
-                success: false,
-                message: 'Error checking table structure',
-                error: err.message
-              });
-            }
-          });
-          
-          // Test direct user insertion
-          app.get('/api/test-insert', async (req, res) => {
-            log('Test insert endpoint hit');
-            
-            if (!req.dbConnected) {
-              return res.status(503).json({
-                success: false,
-                message: 'Database not connected'
-              });
-            }
-            
-            try {
-              // Generate a unique test email
-              const testEmail = `test_${Date.now()}@example.com`;
-              
-              // Try simpler insert query
-              log('Trying direct insert query...');
-              
-              // Create insert query
-              const insertQuery = `
-                INSERT INTO Users (email, password_hash, first_name, last_name)
-                VALUES (@email, @password, @firstName, @lastName);
-                
-                SELECT SCOPE_IDENTITY() AS user_id;
-              `;
-              
-              // Setup request
-              const request = req.db.request();
-              request.input('email', req.sql.NVarChar(100), testEmail);
-              request.input('password', req.sql.NVarChar(255), 'test_password_hash');
-              request.input('firstName', req.sql.NVarChar(100), 'Test');
-              request.input('lastName', req.sql.NVarChar(100), 'User');
-              
-              // Execute query
-              const result = await request.query(insertQuery);
-              
-              log(`Insert result: ${util.inspect(result)}`);
-              
-              // Check if user was created
-              const userId = result.recordset[0].user_id;
-              
-              if (!userId) {
-                return res.status(500).json({
-                  success: false,
-                  message: 'User insert failed - no ID returned',
-                  result
-                });
+          // Add geolocation fallback API
+          app.get('/api/geolocation', (req, res) => {
+            // Return a default location (New York City)
+            res.json({
+              status: 'success',
+              location: {
+                latitude: 40.7128,
+                longitude: -74.0060,
+                accuracy: 1000,
+                source: 'mock'
               }
-              
-              // Verify user was created
-              const verifyQuery = `
-                SELECT * FROM Users WHERE user_id = @userId
-              `;
-              
-              const verifyRequest = req.db.request();
-              verifyRequest.input('userId', req.sql.Int, userId);
-              
-              const verifyResult = await verifyRequest.query(verifyQuery);
-              
-              if (!verifyResult.recordset || verifyResult.recordset.length === 0) {
-                return res.status(500).json({
-                  success: false,
-                  message: 'User not found after insert',
-                  userId
-                });
-              }
-              
-              return res.json({
-                success: true,
-                message: 'Test user insertion successful',
-                user: verifyResult.recordset[0]
-              });
-            } catch (err) {
-              log(`Test insert error: ${err.message}`);
-              return res.status(500).json({
-                success: false,
-                message: 'Error during test insert',
-                error: err.message
-              });
-            }
+            });
           });
           
           // Health check endpoint
           app.get('/health', async (req, res) => {
-            log('Health check endpoint hit');
-            
             try {
               let dbStatus = 'disconnected';
               let dbUserCount = 0;
@@ -770,14 +463,10 @@ jobs:
                 database: {
                   status: dbStatus,
                   userCount: dbUserCount
-                },
-                memory: {
-                  userCount: users.length
-                },
-                environment: process.env.NODE_ENV || 'development'
+                }
               });
             } catch (err) {
-              log(`Health check error: ${err.message}`);
+              logger.error(`Health check error: ${err.message}`);
               res.status(500).json({
                 status: 'ERROR',
                 error: err.message
@@ -785,33 +474,39 @@ jobs:
             }
           });
           
-          // Serve static files
-          app.use(express.static(path.resolve(__dirname)));
+          // Serve static frontend files
+          const staticPath = path.resolve(__dirname);
+          logger.info(`Serving static files from: ${staticPath}`);
+          app.use(express.static(staticPath));
           
-          // SPA fallback
+          // SPA fallback - Catch-all route to serve frontend (SPA routing)
           app.get('*', (req, res) => {
-            res.sendFile(path.join(__dirname, 'index.html'));
-          });
-          
-          // Error handler
-          app.use((err, req, res, next) => {
-            log(`Express error handler: ${err.message}`);
-            log(err.stack);
-            res.status(500).json({
-              success: false,
-              message: 'Internal server error',
-              error: err.message
+            const indexPath = path.join(__dirname, 'index.html');
+            res.sendFile(indexPath, (err) => {
+              if (err) {
+                logger.error(`Error serving index.html: ${err.message}`);
+                res.status(500).send('Server error');
+              }
             });
           });
           
-          // Start server
+          // Global error handler
+          app.use((err, req, res, next) => {
+            logger.error(`Express error: ${err.message}`, err.stack);
+            res.status(500).json({
+              success: false,
+              message: 'Internal server error'
+            });
+          });
+          
+          // Start the server
           app.listen(PORT, () => {
-            log(`SQL debugging app running on port ${PORT}`);
+            logger.info(`AccessibleMap server running on port ${PORT}`);
           });
           EOL
           
           # Update package.json
-          node -e "const pkg = require('./package.json'); pkg.main = 'debug-sql-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node debug-sql-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
+          node -e "const pkg = require('./package.json'); pkg.main = 'production-app.js'; pkg.scripts = pkg.scripts || {}; pkg.scripts.start = 'node production-app.js'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
 
       # Create web.config for Azure
       - name: Create web.config for Azure
@@ -822,17 +517,17 @@ jobs:
           <configuration>
             <system.webServer>
               <handlers>
-                <add name="iisnode" path="debug-sql-app.js" verb="*" modules="iisnode" />
+                <add name="iisnode" path="production-app.js" verb="*" modules="iisnode" />
               </handlers>
               <rewrite>
                 <rules>
                   <rule name="API">
                     <match url="api/*" />
-                    <action type="Rewrite" url="debug-sql-app.js" />
+                    <action type="Rewrite" url="production-app.js" />
                   </rule>
                   <rule name="Health">
                     <match url="health" />
-                    <action type="Rewrite" url="debug-sql-app.js" />
+                    <action type="Rewrite" url="production-app.js" />
                   </rule>
                   <rule name="StaticContent">
                     <match url="(.*)" />
@@ -846,15 +541,14 @@ jobs:
                     <conditions>
                       <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
                     </conditions>
-                    <action type="Rewrite" url="debug-sql-app.js" />
+                    <action type="Rewrite" url="production-app.js" />
                   </rule>
                 </rules>
               </rewrite>
               <iisnode 
                 watchedFiles="web.config;*.js"
                 loggingEnabled="true"
-                logDirectory="iisnode" 
-                debuggingEnabled="true" />
+                logDirectory="iisnode" />
             </system.webServer>
           </configuration>
           EOL
