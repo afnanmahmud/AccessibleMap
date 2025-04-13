@@ -1,6 +1,6 @@
 {
     "locations": [
-      { "name": "Carmichael Student Center", "coordinates":[ [-84.5831447839737, 34.038533480073355], [-84.58283364772798, 34.038660170620055] ]},
+      { "name": "Carmichael Student Center", "coordinates":[ -84.58298921585084, 34.038596825346705 ]},
       { "name": "Academic Learning Center", "coordinates": [-84.58317697048189, 34.03931806936354] },
       { "name": "Academic Learning Center Entrance ♿", "coordinates": [-84.58298921585084, 34.03978259614599] },
       { "name": "English Building", "coordinates": [-84.58414524793626, 34.03942475516541] },

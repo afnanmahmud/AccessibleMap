@@ -17,6 +17,7 @@ import MapSearch from './MapSearch/MapSearch';
 import 'ol/ol.css';
 import './AccessibleMap.css';
 import locationsData from './campuslocations.json';
+import { Coordinate } from 'ol/coordinate';
 
 // OpenRouteService API configuration
 const orsDirections = new Openrouteservice.Directions({
@@ -443,6 +444,47 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     setStepByStepMode(!stepByStepMode);
   }, [stepByStepMode]);
 
+  // Add these functions to your component
+const previewRoute = useCallback((route: { coordinates: Coordinate[]; }) => {
+  // Clear any existing preview
+  clearPreviewRoute();
+  
+  // Create a preview line with a distinct style
+  const routeFeature = new Feature({
+    geometry: new LineString(
+      route.coordinates.map((coord: Coordinate) => fromLonLat(coord))
+    ),
+  });
+
+  routeFeature.setStyle(
+    new Style({
+      stroke: new Stroke({
+        color: 'rgba(37, 99, 235, 0.5)', // Semi-transparent blue
+        width: 4,
+        
+      }),
+    })
+  );
+  
+  // Set a property to identify this as a preview
+  routeFeature.set('type', 'preview');
+  
+  // Add to map
+  vectorSourceRef.current.addFeature(routeFeature);
+}, []);
+
+const clearPreviewRoute = useCallback(() => {
+  // Remove only preview features
+  const features = vectorSourceRef.current.getFeatures();
+  features.forEach(feature => {
+    if (feature.get('type') === 'preview') {
+      vectorSourceRef.current.removeFeature(feature);
+    }
+  });
+}, []);
+
+  
+
   return (
     <div className="map-wrapper">
       <div className="map-page">
@@ -461,16 +503,21 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           {isFlyoutOpen && (
             <div className="route-flyout">
               <h2>Route Options</h2>
+              
               {routeOptions.map((route) => (
+                
                 <div
                   key={route.id}
                   className={`route-option ${selectedRouteId === route.id ? 'selected' : ''}`}
                   onClick={() => setSelectedRouteId(route.id)}
+                  onMouseEnter={() => previewRoute(route)}
+                  onMouseLeave={() => clearPreviewRoute()}
                 >
                   <h3>{route.summary}</h3>
                   <p>Distance: {(route.distance / 1000).toFixed(2)} km</p>
                   <p>Duration: {Math.round(route.duration / 60)} minutes</p>
                 </div>
+
               ))}
               <button 
                 type="button" 
@@ -502,14 +549,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           </div>
         </div>
         <div>
-          <button
-            type="button"
-            onClick={toggleRouteMode}
-            className={`route-mode-toggle ${routeMode === 'wheelchair' ? 'wheelchair-active' : ''}`}
-            aria-label={`Switch to ${routeMode === 'wheelchair' ? 'standard walking' : 'wheelchair'} route`}
-          >
-            {routeMode === 'wheelchair' ? ' 🦽 Wheelchair' : ' 🚶 Walking'}
-          </button>
+
         </div> 
         
         {/* Turn-by-Turn Directions Display */}
