@@ -111,3 +111,132 @@
     gap: 20px;
     width: 100%;
   }
+  /* Add these styles to your AccessibleMap.css file */
+
+.turn-by-turn-directions {
+  margin: 20px 0;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  max-width: 100%;
+  overflow-y: auto;
+}
+
+.directions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #eaeaea;
+  padding-bottom: 10px;
+}
+
+.directions-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.toggle-view-button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.toggle-view-button:hover {
+  background: #1d4ed8;
+}
+
+/* Step by Step view */
+.step-by-step-view {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.current-step {
+  padding: 15px;
+  background: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.current-step p {
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
+}
+
+.current-step .direction-details {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.step-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  background: white;
+}
+
+.step-button {
+  background: #e5e7eb;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 15px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.step-button:hover:not(:disabled) {
+  background: #d1d5db;
+}
+
+.step-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.step-counter {
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+/* List view */
+.directions-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.directions-list li {
+  padding: 12px 15px;
+  border-bottom: 1px solid #eaeaea;
+  position: relative;
+}
+
+.directions-list li:last-child {
+  border-bottom: none;
+}
+
+.directions-list li.current-direction {
+  background: #f0f9ff;
+  border-left: 3px solid #2563eb;
+}
+
+.direction-number {
+  font-weight: bold;
+  margin-right: 6px;
+  display: inline-block;
+  min-width: 20px;
+}
+
+.direction-details {
+  display: block;
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-top: 4px;
+}

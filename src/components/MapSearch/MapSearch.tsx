@@ -115,7 +115,7 @@ const MapSearch: React.FC<MapSearchProps> = ({ onStartChange, onEndChange, onSub
             type="text"
             value={startValue}
             onChange={handleStartChange}
-            placeholder="Start"
+            placeholder="My Location"
             className="map-search-input start-input"
           />
           {showStartSuggestions && startSuggestions.length > 0 && (
