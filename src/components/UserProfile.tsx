@@ -389,8 +389,9 @@ const UserProfile: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* Profile Info */}
+      {/*This is currently just placeholder for profile, does not pull from account data?? */}
+      {/* Profile Info */} 
+      
       <div style={styles.profileInfo}>
         <div style={styles.profileContainer}>
           <div style={styles.avatar}>
@@ -419,6 +420,7 @@ const UserProfile: React.FC = () => {
             <button
               style={{ ...styles.editButton, ...(modeStyles.editButton || {}) }}
               onClick={() => setEditEmail(!editEmail)}
+              aria-label="Edit button. Change email ID"
             >
               Edit
             </button>
@@ -439,6 +441,7 @@ const UserProfile: React.FC = () => {
             <button
               style={{ ...styles.editButton, ...(modeStyles.editButton || {}) }}
               onClick={() => setEditPassword(!editPassword)}
+              aria-label="Edit button. Change password"
             >
               Edit
             </button>
@@ -480,14 +483,6 @@ const UserProfile: React.FC = () => {
               />
               <label htmlFor="high-contrast">High contrast mode 🌙</label>
             </div>
-            <div style={{ ...styles.checkboxItem, ...(modeStyles.text || {}) }}>
-              <input
-                type="checkbox"
-                style={styles.checkbox}
-                id="show-elevators"
-              />
-              <label htmlFor="show-elevators">Show elevators 🚻</label>
-            </div>
           </div>
         </div>
 
@@ -506,6 +501,7 @@ const UserProfile: React.FC = () => {
               <input
                 type="text"
                 style={{ ...styles.smallInput, ...(modeStyles.smallInput || {}) }}
+                aria-label="Enter weight in pounds"
               />
               <span style={{ ...(modeStyles.text || {}) }}>lbs</span>
             </div>
@@ -518,6 +514,7 @@ const UserProfile: React.FC = () => {
               <input
                 type="text"
                 style={{ ...styles.smallInput, ...(modeStyles.smallInput || {}) }}
+                aria-label="Enter height in feet"
               />
               <span style={{ ...(modeStyles.text || {}) }}>ft</span>
             </div>
@@ -530,6 +527,7 @@ const UserProfile: React.FC = () => {
               <input
                 type="text"
                 style={{ ...styles.smallInput, ...(modeStyles.smallInput || {}) }}
+                aria-label="Enter height in inches"
               />
               <span style={{ ...(modeStyles.text || {}) }}>in</span>
             </div>

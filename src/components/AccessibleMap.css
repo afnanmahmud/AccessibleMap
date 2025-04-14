@@ -1,123 +1,247 @@
  .map-content {
-   display: flex;
-   position: relative;
-   width: 100%;
- }
+    display: flex;
+    position: relative;
+    width: 100%;
+  }
+  
+  .route-flyout {
+    width: 300px;
+    background-color: white;
+    border-right: 1px solid #ccc;
+    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1000;
+    overflow-y: auto;
+    transition: transform 0.3s ease;
+  }
+  
+  .route-flyout h2 {
+    margin-top: 0;
+    font-size: 18px;
+    color: #333;
+  }
+  
+  .route-option {
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+  
+  .route-option:hover {
+    background-color: #f8f8f8;
+  }
+  
+  .route-option.selected {
+    background-color: #e3f2fd;
+    border-color: #4285f4;
+  }
+  
+  .route-option h3 {
+    margin: 0 0 5px 0;
+    font-size: 16px;
+    color: #333;
+  }
+  
+  .route-option p {
+    margin: 0;
+    font-size: 14px;
+    color: #666;
+  }
+  
+  .map-root {
+    position: relative;
+    flex: 1;
+    width: 100%;
+    min-height: 600px;
+    background-color: #f5f5f5;
+    transition: margin-left 0.3s ease;
+  }
+  
+  .map-root.shifted {
+    margin-left: 300px; /* Match the width of the flyout */
+  }
+  
+  .map-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
 
- .map-wrapper {
-   margin: 10px 10px;
- }
+  .map-toggle-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    padding: 8px 16px;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+  }
+  
+  .map-toggle-button:hover {
+    background-color: #f8f8f8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+  
+  .top-bar {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 3rem 0 0;
+  }
+  
+  .search-container {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    width: 100%;
+  }
+  /* Add these styles to your AccessibleMap.css file */
 
- .route-flyout {
-   width: 300px;
-   background-color: white;
-   border-right: 1px solid #ccc;
-   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
-   padding: 20px;
-   position: absolute;
-   top: 0;
-   bottom: 0;
-   left: 0;
-   z-index: 1000;
-   overflow-y: auto;
-   transition: transform 0.3s ease;
- }
+.turn-by-turn-directions {
+  margin: 20px 0;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  max-width: 100%;
+  overflow-y: auto;
+}
 
- .route-flyout h2 {
-   margin-top: 0;
-   font-size: 18px;
-   color: #333;
- }
+.directions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #eaeaea;
+  padding-bottom: 10px;
+}
 
- .route-option {
-   padding: 10px;
-   margin-bottom: 10px;
-   border: 1px solid #ddd;
-   border-radius: 4px;
-   cursor: pointer;
-   transition: background-color 0.2s ease;
- }
+.directions-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
 
- .route-option:hover {
-   background-color: #f8f8f8;
- }
+.toggle-view-button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
 
- .route-option.selected {
-   background-color: #e3f2fd;
-   border-color: #4285f4;
- }
+.toggle-view-button:hover {
+  background: #1d4ed8;
+}
 
- .route-option h3 {
-   margin: 0 0 5px 0;
-   font-size: 16px;
-   color: #333;
- }
+/* Step by Step view */
+.step-by-step-view {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+}
 
- .route-option p {
-   margin: 0;
-   font-size: 14px;
-   color: #666;
- }
+.current-step {
+  padding: 15px;
+  background: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
+}
 
- .map-root {
-   position: relative;
-   flex: 1;
-   width: 100%;
-   min-height: 600px;
-   background-color: #f5f5f5;
-   transition: margin-left 0.3s ease;
- }
+.current-step p {
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
+}
 
- .map-root.shifted {
-   margin-left: 300px;
-   /* Match the width of the flyout */
- }
+.current-step .direction-details {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
 
- .map-container {
-   position: absolute;
-   top: 0;
-   left: 0;
-   width: 100%;
-   height: 100%;
- }
+.step-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  background: white;
+}
 
- .map-toggle-button {
-   position: absolute;
-   top: 10px;
-   right: 10px;
-   z-index: 1000;
-   padding: 8px 16px;
-   background-color: white;
-   border: 1px solid #ccc;
-   border-radius: 4px;
-   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-   cursor: pointer;
-   font-size: 14px;
-   transition: all 0.2s ease;
- }
+.step-button {
+  background: #e5e7eb;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 15px;
+  cursor: pointer;
+  font-weight: 500;
+}
 
- .map-toggle-button:hover {
-   background-color: #f8f8f8;
-   transform: translateY(-1px);
-   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
- }
+.step-button:hover:not(:disabled) {
+  background: #d1d5db;
+}
 
- .top-bar {
-   width: 100%;
-   display: flex;
-   flex-direction: row;
-   align-items: center;
-   padding: 0 3rem 0 0;
- }
+.step-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
- .search-container {
-   display: flex;
-   align-items: center;
-   gap: 20px;
-   width: 100%;
- }
+.step-counter {
+  font-size: 0.9rem;
+  color: #6b7280;
+}
 
- .title {
+/* List view */
+.directions-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.directions-list li {
+  padding: 12px 15px;
+  border-bottom: 1px solid #eaeaea;
+  position: relative;
+}
+
+.directions-list li:last-child {
+  border-bottom: none;
+}
+
+.directions-list li.current-direction {
+  background: #f0f9ff;
+  border-left: 3px solid #2563eb;
+}
+
+.direction-number {
+  font-weight: bold;
+  margin-right: 6px;
+  display: inline-block;
+  min-width: 20px;
+}
+
+.direction-details {
+  display: block;
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.title {
    margin-bottom: 20px;
    font-size: 25px;
    color: #333;
