@@ -71,7 +71,7 @@
   
   .map-search-button {
     padding: 10px 20px;
-    background-color: #4285f4;
+    background-color: #0046C9;
     color: white;
     border: none;
     border-radius: 4px;
@@ -81,7 +81,7 @@
   }
   
   .map-search-button:hover {
-    background-color: #3267d6;
+    background-color: #003DAE;
   }
   
   .bookmark-button,
