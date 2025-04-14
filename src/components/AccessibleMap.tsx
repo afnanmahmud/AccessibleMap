@@ -64,7 +64,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   const mapInstance = useRef<Map | null>(null);
   const vectorSourceRef = useRef(new VectorSource());
   const userMarkerRef = useRef(new Feature());
-  
+
   const [viewMode, setViewMode] = useState<'standard' | 'satellite'>('standard');
   const [startLocation, setStartLocation] = useState('');
   const [endLocation, setEndLocation] = useState('');
@@ -111,12 +111,12 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
         const { latitude, longitude } = position.coords;
         const lonLat = [longitude, latitude];
         setUserLocation(lonLat as [number, number]);
-        
+
         const coords = fromLonLat(lonLat);
-  
+
         // Update marker position
         userMarkerRef.current.setGeometry(new Point(coords));
-  
+
         // Ensure the marker is added only once
         if (!vectorSourceRef.current.hasFeature(userMarkerRef.current)) {
           userMarkerRef.current.setStyle(
@@ -129,7 +129,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           );
           vectorSourceRef.current.addFeature(userMarkerRef.current);
         }
-  
+
         // Follow user location
         if (mapInstance.current) {
           mapInstance.current.getView().setCenter(coords);
@@ -148,13 +148,13 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   useEffect(() => {
     if (!mapRef.current) return;
 
-    const vectorLayer = new VectorLayer({ 
-      source: vectorSourceRef.current 
+    const vectorLayer = new VectorLayer({
+      source: vectorSourceRef.current
     });
 
-    const standardLayer = new TileLayer({ 
-      source: new OSM(), 
-      visible: true 
+    const standardLayer = new TileLayer({
+      source: new OSM(),
+      visible: true
     });
 
     const satelliteLayer = new TileLayer({
@@ -212,15 +212,15 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   // Find location coordinates by name
   const findLocationByName = useCallback((query: string): number[] | null => {
     if (!query || query.toLowerCase() === 'my location') return null;
-  
+
     const lowerQuery = query.toLowerCase();
-  
-    const exactMatch = campusLocations.find(loc => 
+
+    const exactMatch = campusLocations.find(loc =>
       loc.name.toLowerCase() === lowerQuery
     );
     if (exactMatch) return exactMatch.coordinates;
-  
-    const partialMatch = campusLocations.find(loc => 
+
+    const partialMatch = campusLocations.find(loc =>
       loc.name.toLowerCase().includes(lowerQuery)
     );
     return partialMatch ? partialMatch.coordinates : null;
@@ -247,7 +247,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
       setRouteOptions([]);
       return;
     }
-    
+
     const timer = setTimeout(() => {
       let startCoords;
       if (startLocation) {
@@ -306,32 +306,32 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
       alert('Please select a route to start.');
       return;
     }
-  
+
     clearRoutes();
-  
+
     let startCoords;
     if (startLocation && startLocation.toLowerCase() !== 'my location') {
       startCoords = findLocationByName(startLocation);
     } else if (userLocation) {
       startCoords = userLocation;
     }
-  
+
     if (!startCoords) {
       alert('Unable to determine your current location. Please enter a start location.');
       return;
     }
-  
+
     const endCoords = findLocationByName(endLocation);
-  
+
     if (!endCoords) {
       alert('Please enter a valid end location');
       return;
     }
-  
+
     // Convert coordinates to OpenLayers format
     const startPoint = fromLonLat(startCoords);
     const endPoint = fromLonLat(endCoords);
-  
+
     // Create start marker (blue)
     const startMarker = new Feature(new Point(startPoint));
     startMarker.setStyle(
@@ -344,7 +344,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
       })
     );
     startMarker.set('type', 'marker');
-  
+
     // Create end marker (red)
     const endMarker = new Feature(new Point(endPoint));
     endMarker.setStyle(
@@ -357,11 +357,11 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
       })
     );
     endMarker.set('type', 'marker');
-  
+
     // Add markers to the vector source
     vectorSourceRef.current.addFeature(startMarker);
     vectorSourceRef.current.addFeature(endMarker);
-  
+
     // Zoom to fit both markers
     if (mapInstance.current) {
       const extent = [
@@ -370,14 +370,14 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
         Math.max(startPoint[0], endPoint[0]), // Max Longitude
         Math.max(startPoint[1], endPoint[1]), // Max Latitude
       ];
-  
+
       mapInstance.current.getView().fit(extent, {
         padding: [50, 50, 50, 50], 
         duration: 1000, 
         maxZoom: 18, 
       });
     }
-  
+
     // Display the selected route
     const selectedRoute = routeOptions.find((route) => route.id === selectedRouteId);
     if (selectedRoute) {
@@ -386,7 +386,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           selectedRoute.coordinates.map((coord: number[]) => fromLonLat(coord))
         ),
       });
-  
+
       routeFeature.setStyle(
         new Style({
           stroke: new Stroke({
@@ -396,9 +396,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           }),
         })
       );
-  
+
       vectorSourceRef.current.addFeature(routeFeature);
-  
+
       // Set turn-by-turn directions
       if (selectedRoute.steps) {
         const directions: TurnByTurnDirection[] = selectedRoute.steps.map((step: any) => ({
@@ -407,12 +407,11 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           distance: step.distance,
           duration: step.duration
         }));
-        
+
         setTurnByTurnDirections(directions);
         setCurrentDirectionIndex(0);
       }
     }
-    
     // Close the flyout
     setIsFlyoutOpen(false);
   }, [startLocation, endLocation, selectedRouteId, routeOptions, clearRoutes, findLocationByName, userLocation, routeMode]);
@@ -486,9 +485,10 @@ const clearPreviewRoute = useCallback(() => {
   return (
     <div className="map-wrapper">
       <div className="map-page">
+        <h1 className="title">Kennesaw State University - Accessible Map</h1>
         <div className="top-bar">
           <div className="search-container">
-            <MapSearch 
+            <MapSearch
               onStartChange={handleStartLocationChange}
               onEndChange={handleEndLocationChange}
               onSubmit={calculateRoute}
@@ -521,9 +521,9 @@ const clearPreviewRoute = useCallback(() => {
           )}
 
           <div className={`map-root ${className || ''} ${isFlyoutOpen ? 'shifted' : ''}`}>
-            <div 
-              ref={mapRef} 
-              className="map-container" 
+            <div
+              ref={mapRef}
+              className="map-container"
               role="application"
               aria-label="Interactive map displaying user location and navigation"
             />
@@ -538,9 +538,6 @@ const clearPreviewRoute = useCallback(() => {
             </div>
           </div>
         </div>
-        <div>
-
-        </div> 
         
         {/* Turn-by-Turn Directions Display */}
         {turnByTurnDirections.length > 0 && (
@@ -600,8 +597,68 @@ const clearPreviewRoute = useCallback(() => {
             )}
           </div>
         )}
+
+        <div className='footer'>
+          <div className='footer-section'>
+            <p className="section-heading">Contact Info</p>
+            <div className='section-info'>
+              <div className='two-col'>
+                <div>
+                  <p><strong>Kennesaw Campus</strong><br />1000 Chastain Road<br />Kennesaw, GA 30144</p>
+                  <p><strong>Marietta Campus</strong><br />1100 South Marietta Pkwy<br />Marietta, GA 30060</p>
+                </div>
+                <div>
+                  <p><strong>Phone</strong><br />470-KSU-INFO<br />(470-578-4636)</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className='footer-section'>
+            <p className="section-heading">Accessibility Resources</p>
+            <div className='section-info'>
+              <div className='two-col'>
+                <div>
+                  <p><strong><a href="https://www.kennesaw.edu/student-affairs/dean-of-students/student-disability-services/index.php">Student Disability Services</a></strong></p>
+                  <p>
+                    <strong>Kennesaw Campus</strong>
+                    <br />
+                    <strong>Location: Kennesaw Hall, Suite 1205</strong>
+                    <br /><br />
+                    <strong>Mailing Address:</strong> <br />
+                    585 Cobb Ave NW
+                    MD 0128
+                    Kennesaw, GA 30144
+                    <br /> <br />
+                    <strong>Phone:</strong> (470) 578-2666 <br />
+                    <strong>Fax:</strong> (470) 578-9111 <br />
+                    <strong>Email:</strong> sds@kennesaw.edu <br /> <br />
+                    <strong>Office Hours:</strong> <br /> Monday - Friday, 8:00am - 5:00pm <br />
+                  </p>
+                </div>
+                <div>
+                  <p><strong><a href="https://maps.kennesaw.edu/">Campus Maps</a></strong></p>
+                  <p>
+                    <strong>Marietta Campus</strong>
+                    <br />
+                    <strong>Location: Joe Mack Wilson Student Center, Suite 160</strong>
+                    <br /><br />
+                    <strong>Mailing Address:</strong> <br />
+                    860 Rossbacher Way
+                    MD 9008
+                    Marietta, GA 30060
+                    <br /> <br />
+                    <strong>Phone:</strong> (470) 578-7361 <br />
+                    <strong>Fax:</strong> (470) 578-9111 <br />
+                    <strong>Email:</strong> sds@kennesaw.edu <br /> <br />
+                    <strong>Office Hours:</strong> <br /> Monday - Friday, 8:00am - 5:00pm <br />
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </div >
   );
 };
 
