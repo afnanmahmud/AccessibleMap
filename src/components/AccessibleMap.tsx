@@ -483,8 +483,6 @@ const clearPreviewRoute = useCallback(() => {
   });
 }, []);
 
-  
-
   return (
     <div className="map-wrapper">
       <div className="map-page">
@@ -519,14 +517,6 @@ const clearPreviewRoute = useCallback(() => {
                 </div>
 
               ))}
-              <button 
-                type="button" 
-                onClick={calculateRoute}
-                className="select-route-button"
-                aria-label="Select this route"
-              >
-                Use Selected Route
-              </button>
             </div>
           )}
 
