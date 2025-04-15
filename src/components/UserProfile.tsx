@@ -6,7 +6,7 @@ import axios from 'axios';
 // import { AuthContext } from '../context/AuthContext';
 
 // For development/testing - mock API to handle server timeouts
-const useMockData = true; // Set to false when our API is working
+const useMockData = false; // Now using real data from the database
 
 // Mock API and data
 const mockUserData = {
@@ -163,73 +163,31 @@ const UserProfile: React.FC = () => {
           return;
         }
 
-        // Get user profile from API with timeout and retry logic
-        let retryCount = 0;
-        const maxRetries = 2;
-        let profileData = null;
-
-        while (retryCount <= maxRetries && !profileData) {
-          try {
-            // Set a reasonable timeout to avoid long waits
-            const response = await axios.get(
-              'https://accessiblemap.azurewebsites.net/api/users/profile',
-              {
-                headers: {
-                  Authorization: `Bearer ${auth.token}`
-                },
-                timeout: 5000 // 5 second timeout
-              }
-            );
-            profileData = response.data;
-          } catch (error) {
-            retryCount++;
-            if (retryCount > maxRetries) throw error;
-            
-            // Wait before retrying (exponential backoff)
-            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-          }
-        }
-
-        // If we have data, update the state
-        if (profileData) {
+        // Get user profile from API
+        try {
+          // Set a reasonable timeout to avoid long waits
+          const response = await axios.get(
+            'https://accessiblemap.azurewebsites.net/api/users/profile',
+            {
+              headers: {
+                Authorization: `Bearer ${auth.token}`
+              },
+              timeout: 10000 // 10 second timeout
+            }
+          );
+          
+          // Update state with user data from the database
+          const profileData = response.data;
           setUserData(profileData);
           setEmail(profileData.email);
-          setHighContrastMode(profileData.highContrastMode);
-        } else {
-          // Fallback to default/mock data if API is completely unavailable
-          // In production, we might want to show an error instead
-          const fallbackData = {
-            id: "user123",
-            username: "johnsmith",
-            email: "jsmith22@students.edu",
-            firstName: "John",
-            lastName: "Smith",
-            highContrastMode: false
-          };
+          setHighContrastMode(profileData.highContrastMode || false);
           
-          setUserData(fallbackData);
-          setEmail(fallbackData.email);
-          setHighContrastMode(fallbackData.highContrastMode);
-          
-          // Show a warning that we're using fallback data
-          setErrorMsg('Using cached profile data. Some features may be limited.');
+        } catch (error) {
+          console.error('Failed to fetch user profile from API:', error);
+          throw error;
         }
       } catch (err) {
         console.error('Failed to fetch user profile:', err);
-        
-        // Create a fallback profile if network is unavailable
-        const fallbackData = {
-          id: "user123",
-          username: "johnsmith",
-          email: "jsmith22@students.edu",
-          firstName: "John",
-          lastName: "Smith",
-          highContrastMode: false
-        };
-        
-        setUserData(fallbackData);
-        setEmail(fallbackData.email);
-        setHighContrastMode(fallbackData.highContrastMode);
         
         // Show a more detailed error message based on the error type
         if (axios.isAxiosError(err)) {
@@ -242,15 +200,13 @@ const UserProfile: React.FC = () => {
             // Could redirect to login here
             // navigate('/login');
           } else {
-            setErrorMsg('Failed to load user profile. Using local data.');
+            setErrorMsg('Failed to load user profile from database.');
           }
         } else {
-          setErrorMsg('An unexpected error occurred. Using local data.');
+          setErrorMsg('An unexpected error occurred loading our profile.');
         }
       } finally {
-        if (!useMockData) {
-          setIsSaving(false);
-        }
+        setIsSaving(false);
       }
     };
     
@@ -1450,4 +1406,5 @@ const UserProfile: React.FC = () => {
     </div>
   );
 };
+
 export default UserProfile;
