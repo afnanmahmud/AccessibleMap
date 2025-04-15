@@ -109,12 +109,12 @@ const UserProfile: React.FC = () => {
   const isLandscape = windowWidth > windowHeight && isMobile;
 
   // For production, use our authentication context or service
-  // Uncomment this when you have our authentication context set up
+  // Uncomment this when we have our authentication context set up
   // const { user, token, logout } = useContext(AuthContext);
   
   // Get authenticated user info - production version
   const getCurrentUser = () => {
-    // Temporary solution until you integrate our actual auth solution
+    // Temporary solution until we integrate our actual auth solution
     // In production, this should come from our auth context or service
     
     // Example using an auth context:
@@ -197,7 +197,7 @@ const UserProfile: React.FC = () => {
           setHighContrastMode(profileData.highContrastMode);
         } else {
           // Fallback to default/mock data if API is completely unavailable
-          // In production, you might want to show an error instead
+          // In production, we might want to show an error instead
           const fallbackData = {
             id: "user123",
             username: "johnsmith",
@@ -476,7 +476,7 @@ const UserProfile: React.FC = () => {
 
   // Handle Sign Out with confirmation
   const handleSignOut = () => {
-    const confirmSignOut = window.confirm("Are you sure you want to sign out?");
+    const confirmSignOut = window.confirm("Are we sure we want to sign out?");
     if (confirmSignOut) {
       // In production, use our auth context logout function
       // if (logout) logout();
@@ -1008,3 +1008,445 @@ const UserProfile: React.FC = () => {
                 <HelpIcon />
                 Help
               </a>
+              
+              <div
+                style={{
+                  ...styles.dropdownItem,
+                  ...(focusedElement === 'signOutBtn' ? styles.dropdownItemFocus : {}),
+                  ...(modeStyles.dropdownItem || {})
+                }}
+                onClick={handleSignOut}
+                role="menuitem"
+                tabIndex={0}
+                onFocus={() => setFocusedElement('signOutBtn')}
+                onBlur={() => setFocusedElement(null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    handleSignOut();
+                    e.preventDefault();
+                  }
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = (modeStyles.dropdownItemHover || styles.dropdownItemHover).backgroundColor as string;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = (modeStyles.dropdown || { backgroundColor: '#ffffff' }).backgroundColor as string;
+                }}
+              >
+                <SignOutIcon />
+                Sign Out
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Profile Info */}
+      <div style={styles.profileInfo}>
+        <div style={styles.profileContainer}>
+          <div style={styles.avatar}>
+            <span>{userData ? getUserInitials(userData.firstName, userData.lastName) : ''}</span>
+          </div>
+          <h2 style={{ ...styles.name, ...(modeStyles.text || {}) }}>
+            {userData ? `${userData.firstName} ${userData.lastName}` : ''}
+          </h2>
+        </div>
+      </div>
+
+      {/* Display error/success messages */}
+      {errorMsg && (
+        <div style={{ 
+          ...styles.errorMsg, 
+          ...(highContrastMode ? { backgroundColor: '#500000', borderColor: '#FF6B6B' } : {}) 
+        }}>
+          {errorMsg}
+        </div>
+      )}
+      
+      {successMsg && (
+        <div style={{ 
+          ...styles.successMsg, 
+          ...(highContrastMode ? { backgroundColor: '#004D40', borderColor: '#00E676' } : {}) 
+        }}>
+          {successMsg}
+        </div>
+      )}
+
+      {/* Account Settings */}
+      <div style={styles.settingsSection}>
+        <div style={styles.field}>
+          <div style={styles.inputGroup}>
+            <label 
+              style={{ ...styles.label, ...(modeStyles.text || {}) }}
+              htmlFor="email"
+            >
+              Email ID
+            </label>
+            <input
+              id="email"
+              style={{
+                ...styles.input,
+                ...(focusedElement === 'email' ? styles.inputFocus : {}),
+                ...(modeStyles.input || {})
+              }}
+              type="text"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={!editEmail}
+              onFocus={() => setFocusedElement('email')}
+              onBlur={() => setFocusedElement(null)}
+              aria-label="Email"
+            />
+            <button
+              style={{
+                ...styles.editButton,
+                ...(focusedElement === 'editEmailBtn' ? styles.editButtonFocus : {}),
+                ...(modeStyles.editButton || {})
+              }}
+              onClick={() => {
+                if (editEmail) {
+                  handleEmailUpdate();
+                } else {
+                  setEditEmail(true);
+                }
+              }}
+              onFocus={() => setFocusedElement('editEmailBtn')}
+              onBlur={() => setFocusedElement(null)}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = (styles.editButtonHover as any).backgroundColor;
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = (modeStyles.editButton || styles.editButton).backgroundColor as string;
+              }}
+              onMouseDown={(e) => {
+                e.currentTarget.style.transform = (styles.editButtonActive as any).transform;
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.transform = 'none';
+              }}
+              disabled={isSaving}
+              aria-label={editEmail ? "Save Email" : "Edit Email"}
+            >
+              {editEmail ? "Save" : "Edit"}
+            </button>
+          </div>
+        </div>
+        
+        <div style={styles.field}>
+          <div style={styles.inputGroup}>
+            <label 
+              style={{ ...styles.label, ...(modeStyles.text || {}) }}
+              htmlFor="password"
+            >
+              Password
+            </label>
+            
+            {!editPassword ? (
+              <>
+                <input
+                  id="password"
+                  style={{
+                    ...styles.input,
+                    ...(focusedElement === 'password' ? styles.inputFocus : {}),
+                    ...(modeStyles.input || {})
+                  }}
+                  type="password"
+                  value={password}
+                  disabled={true}
+                  onFocus={() => setFocusedElement('password')}
+                  onBlur={() => setFocusedElement(null)}
+                  aria-label="Password"
+                />
+                <button
+                  style={{
+                    ...styles.editButton,
+                    ...(focusedElement === 'editPasswordBtn' ? styles.editButtonFocus : {}),
+                    ...(modeStyles.editButton || {})
+                  }}
+                  onClick={() => setEditPassword(true)}
+                  onFocus={() => setFocusedElement('editPasswordBtn')}
+                  onBlur={() => setFocusedElement(null)}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = (styles.editButtonHover as any).backgroundColor;
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = (modeStyles.editButton || styles.editButton).backgroundColor as string;
+                  }}
+                  onMouseDown={(e) => {
+                    e.currentTarget.style.transform = (styles.editButtonActive as any).transform;
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.transform = 'none';
+                  }}
+                  disabled={isSaving}
+                  aria-label="Edit Password"
+                >
+                  Edit
+                </button>
+              </>
+            ) : (
+              <div style={styles.passwordContainer}>
+                <input
+                  id="current-password"
+                  style={{
+                    ...styles.passwordField,
+                    ...(focusedElement === 'currentPassword' ? styles.inputFocus : {}),
+                    ...(modeStyles.input || {})
+                  }}
+                  type="password"
+                  placeholder="Current password"
+                  value={password === "••••••••" ? "" : password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setFocusedElement('currentPassword')}
+                  onBlur={() => setFocusedElement(null)}
+                  aria-label="Current Password"
+                />
+                
+                <input
+                  id="new-password"
+                  style={{
+                    ...styles.passwordField,
+                    ...(focusedElement === 'newPassword' ? styles.inputFocus : {}),
+                    ...(modeStyles.input || {})
+                  }}
+                  type="password"
+                  placeholder="New password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  onFocus={() => setFocusedElement('newPassword')}
+                  onBlur={() => setFocusedElement(null)}
+                  aria-label="New Password"
+                />
+                
+                <input
+                  id="confirm-password"
+                  style={{
+                    ...styles.passwordField,
+                    ...(focusedElement === 'confirmPassword' ? styles.inputFocus : {}),
+                    ...(modeStyles.input || {})
+                  }}
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onFocus={() => setFocusedElement('confirmPassword')}
+                  onBlur={() => setFocusedElement(null)}
+                  aria-label="Confirm New Password"
+                />
+                
+                <div style={styles.buttonContainer}>
+                  <button
+                    style={{
+                      ...styles.editButton,
+                      marginRight: '8px',
+                      backgroundColor: '#e0e0e0',
+                      ...(modeStyles.editButton ? { backgroundColor: '#333333', color: '#ffffff' } : {})
+                    }}
+                    onClick={() => {
+                      setEditPassword(false);
+                      setPassword("••••••••");
+                      setNewPassword("");
+                      setConfirmPassword("");
+                      setErrorMsg(null);
+                    }}
+                    disabled={isSaving}
+                  >
+                    Cancel
+                  </button>
+                  
+                  <button
+                    style={{
+                      ...styles.editButton,
+                      ...(focusedElement === 'savePasswordBtn' ? styles.editButtonFocus : {}),
+                      ...(modeStyles.editButton || {})
+                    }}
+                    onClick={handlePasswordUpdate}
+                    onFocus={() => setFocusedElement('savePasswordBtn')}
+                    onBlur={() => setFocusedElement(null)}
+                    disabled={isSaving || !password || !newPassword || !confirmPassword}
+                    aria-label="Save Password"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Accessibility & Lifestyle */}
+      <div style={styles.optionsSection}>
+        {/* Map Accessibility */}
+        <div style={styles.sectionColumn}>
+          <h3 style={{ ...styles.sectionTitle, ...(modeStyles.text || {}) }}>
+            Map Accessibility
+          </h3>
+          <div style={styles.checkboxGroup}>
+            <div style={{ ...styles.checkboxItem, ...(modeStyles.text || {}) }}>
+              <input
+                type="checkbox"
+                style={{
+                  ...styles.checkbox,
+                  ...(focusedElement === 'accessibleRoutes' ? styles.checkboxFocus : {})
+                }}
+                id="accessible-routes"
+                onFocus={() => setFocusedElement('accessibleRoutes')}
+                onBlur={() => setFocusedElement(null)}
+                aria-label="Use accessible routes"
+              />
+              <label htmlFor="accessible-routes">Use accessible routes ♿</label>
+            </div>
+            
+            <div style={{ ...styles.checkboxItem, ...(modeStyles.text || {}) }}>
+              <input
+                type="checkbox"
+                style={{
+                  ...styles.checkbox,
+                  ...(focusedElement === 'screenReader' ? styles.checkboxFocus : {})
+                }}
+                id="screen-reader"
+                onFocus={() => setFocusedElement('screenReader')}
+                onBlur={() => setFocusedElement(null)}
+                aria-label="Screen reader"
+              />
+              <label htmlFor="screen-reader">Screen reader 🔊</label>
+            </div>
+            
+            <div style={{ ...styles.checkboxItem, ...(modeStyles.text || {}) }}>
+              <input
+                type="checkbox"
+                style={{
+                  ...styles.checkbox,
+                  ...(focusedElement === 'highContrast' ? styles.checkboxFocus : {})
+                }}
+                id="high-contrast"
+                checked={highContrastMode}
+                onChange={handleHighContrastChange}
+                onFocus={() => setFocusedElement('highContrast')}
+                onBlur={() => setFocusedElement(null)}
+                aria-label="High contrast mode"
+                disabled={isSaving}
+              />
+              <label htmlFor="high-contrast">High contrast mode 🌙</label>
+            </div>
+          </div>
+        </div>
+
+        {/* Lifestyle */}
+        <div style={styles.sectionColumn}>
+          <h3 style={{ ...styles.sectionTitle, ...(modeStyles.text || {}) }}>
+            Lifestyle
+          </h3>
+          <div style={styles.measurements}>
+            <div style={styles.measurementItem}>
+              <label
+                htmlFor="weight"
+                style={{ ...styles.measurementLabel, ...(modeStyles.text || {}) }}
+              >
+                Weight
+              </label>
+              <input
+                id="weight"
+                type="text"
+                style={{
+                  ...styles.smallInput,
+                  ...(focusedElement === 'weight' ? styles.smallInputFocus : {}),
+                  ...(modeStyles.smallInput || {})
+                }}
+                onFocus={() => setFocusedElement('weight')}
+                onBlur={() => setFocusedElement(null)}
+                aria-label="Weight in pounds"
+              />
+              <span style={{ ...(modeStyles.text || {}) }}>lbs</span>
+            </div>
+              
+            <div style={styles.measurementItem}>
+              <label
+                htmlFor="height-feet"
+                style={{ ...styles.measurementLabel, ...(modeStyles.text || {}) }}
+              >
+                Height
+              </label>
+              <input
+                id="height-feet"
+                type="text"
+                style={{
+                  ...styles.smallInput,
+                  ...(focusedElement === 'heightFeet' ? styles.smallInputFocus : {}),
+                  ...(modeStyles.smallInput || {})
+                }}
+                onFocus={() => setFocusedElement('heightFeet')}
+                onBlur={() => setFocusedElement(null)}
+                aria-label="Height in feet"
+              />
+              <span style={{ ...(modeStyles.text || {}) }}>ft</span>
+            </div>
+              
+            <div style={styles.measurementItem}>
+              <label
+                htmlFor="height-inches"
+                style={{ ...styles.measurementLabel, visibility: 'hidden' }}
+              >
+                Height
+              </label>
+              <input
+                id="height-inches"
+                type="text"
+                style={{
+                  ...styles.smallInput,
+                  ...(focusedElement === 'heightInches' ? styles.smallInputFocus : {}),
+                  ...(modeStyles.smallInput || {})
+                }}
+                onFocus={() => setFocusedElement('heightInches')}
+                onBlur={() => setFocusedElement(null)}
+                aria-label="Height in inches"
+              />
+              <span style={{ ...(modeStyles.text || {}) }}>in</span>
+            </div>
+            
+            <div style={styles.checkboxGroup}>
+              <div style={{ ...styles.checkboxItem, ...(modeStyles.text || {}) }}>
+                <input
+                  type="checkbox"
+                  style={{
+                    ...styles.checkbox,
+                    ...(focusedElement === 'longerRoutes' ? styles.checkboxFocus : {})
+                  }}
+                  id="longer-routes"
+                  onFocus={() => setFocusedElement('longerRoutes')}
+                  onBlur={() => setFocusedElement(null)}
+                  aria-label="Prioritize longer routes"
+                />
+                <label htmlFor="longer-routes">Prioritize longer routes</label>
+              </div>
+              
+              <div style={{ ...styles.checkboxItem, ...(modeStyles.text || {}) }}>
+                <input
+                  type="checkbox"
+                  style={{
+                    ...styles.checkbox,
+                    ...(focusedElement === 'showStats' ? styles.checkboxFocus : {})
+                  }}
+                  id="show-stats"
+                  onFocus={() => setFocusedElement('showStats')}
+                  onBlur={() => setFocusedElement(null)}
+                  aria-label="Show steps and calories"
+                />
+                <label htmlFor="show-stats">Show steps and calories</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+        
+      {/* Saving indicator */}
+      {isSaving && (
+        <div style={styles.savingIndicator}>
+          <span style={styles.loadingSpinner}></span>
+          Saving changes...
+        </div>
+      )}
+    </div>
+  );
+};
