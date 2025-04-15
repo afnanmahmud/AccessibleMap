@@ -21,7 +21,7 @@ import { Coordinate } from 'ol/coordinate';
 import wheelchairIcon from "./../assets/wheelchair-icon.png";
 import volumeIcon from "./../assets/volume-icon.png";
 import contrastIcon from "./../assets/high-contrast-icon.png";
-import bookmarkIcon from "./../assets/bookmark.png";
+import bookmarkIcon from "./../assets/bookmark-icon.png";
 
 // OpenRouteService API
 const orsDirections = new Openrouteservice.Directions({
@@ -48,17 +48,16 @@ interface RouteOption {
   steps: any;
   id: number;
   summary: string;
-  distance: number; // in meters
-  duration: number; // in seconds
+  distance: number;
+  duration: number;
   coordinates: number[][];
-  startLocation?: string; // Added for bookmarking
-  endLocation?: string;   // Added for bookmarking
-  routeMode?: 'wheelchair' | 'walking'; // Added for bookmarking
+  startLocation?: string;
+  endLocation?: string;
+  routeMode?: 'wheelchair' | 'walking';
 }
 
 const INITIAL_CENTER = fromLonLat([-84.5831, 34.0390]);
 
-// Load campus locations from JSON file
 const campusLocations: Location[] = locationsData.locations.map(loc => ({
   name: loc.name,
   coordinates: loc.coordinates as unknown as [number, number]
@@ -82,12 +81,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   const [currentDirectionIndex, setCurrentDirectionIndex] = useState(0);
   const [stepByStepMode, setStepByStepMode] = useState(false);
   const [isRouteActive, setIsRouteActive] = useState(false);
-
-  // New states for bookmark functionality
   const [bookmarkedRoutes, setBookmarkedRoutes] = useState<RouteOption[]>([]);
   const [isBookmarkFlyoutOpen, setIsBookmarkFlyoutOpen] = useState(false);
 
-  // Place accessibility markers on the map
   const placeMarkers = useCallback((showIcons: boolean) => {
     const features = vectorSourceRef.current.getFeatures();
     features.forEach(feature => {
@@ -104,9 +100,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     campusLocations.forEach((location) => {
       const coords = fromLonLat(location.coordinates);
       const marker = new Feature(new Point(coords));
-
       marker.set('type', 'accessibility-marker');
-
       marker.setStyle(
         new Style({
           image: new Icon({
@@ -121,7 +115,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     setShowWheelchairIcons(true);
   }, []);
 
-  // Start tracking user location
   const startTracking = useCallback(() => {
     if (!navigator.geolocation) {
       console.error('Geolocation is not supported by this browser.');
@@ -135,7 +128,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
         setUserLocation(lonLat as [number, number]);
         
         const coords = fromLonLat(lonLat);
-  
         userMarkerRef.current.setGeometry(new Point(coords));
 
         if (!vectorSourceRef.current.hasFeature(userMarkerRef.current)) {
@@ -164,7 +156,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   }, []); 
   userMarkerRef.current.set('type', 'user-location');
 
-  // Initialize the map
   useEffect(() => {
     if (!mapRef.current) return;
 
@@ -205,7 +196,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     };
   }, []);
 
-  // Toggle between standard and satellite map views
   const toggleMapView = useCallback(() => {
     if (!mapInstance.current) return;
 
@@ -224,12 +214,10 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     }
   }, [viewMode]);
 
-  // Toggle between walking and wheelchair route modes
   const toggleRouteMode = useCallback(() => {
     setRouteMode(routeMode === 'walking' ? 'wheelchair' : 'walking');
   }, [routeMode]);
 
-  // Find location coordinates by name
   const findLocationByName = useCallback((query: string): number[] | null => {
     if (!query || query.toLowerCase() === 'my location') return null;
   
@@ -246,7 +234,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     return partialMatch ? partialMatch.coordinates : null;
   }, []);
 
-  // Clear previous routes from the map
   const clearRoutes = useCallback(() => {
     const features = vectorSourceRef.current.getFeatures();
     features.forEach(feature => {
@@ -262,7 +249,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     setEndLocation('');
   }, []);
 
-  // Calculate route options when start and end locations are set
   useEffect(() => {
     if ((!startLocation && !userLocation) || !endLocation) {
       setIsFlyoutOpen(false);
@@ -287,6 +273,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
         setRouteOptions([]);
         return;
       }
+
+      // Close bookmark flyout when opening route flyout
+      setIsBookmarkFlyoutOpen(false);
 
       orsDirections
         .calculate({
@@ -322,12 +311,15 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     return () => clearTimeout(timer);
   }, [startLocation, endLocation, routeMode, findLocationByName, userLocation]);
 
-  // Toggle bookmark flyout
   const toggleBookmarkFlyout = () => {
-    setIsBookmarkFlyoutOpen(!isBookmarkFlyoutOpen);
+    if (isBookmarkFlyoutOpen) {
+      setIsBookmarkFlyoutOpen(false);
+    } else {
+      setIsFlyoutOpen(false); // Close route flyout
+      setIsBookmarkFlyoutOpen(true);
+    }
   };
 
-  // Handle bookmark click for a route
   const handleBookmarkClick = (route: RouteOption) => {
     const isBookmarked = bookmarkedRoutes.some(r => r.id === route.id);
     if (isBookmarked) {
@@ -337,7 +329,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     }
   };
 
-  // Calculate and display the selected route
   const calculateRoute = useCallback(() => {
     if (selectedRouteId === null || !routeOptions.length) {
       alert('Please select a route to start.');
@@ -510,13 +501,14 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   return (
     <div className="map-wrapper">
       <div className="map-page">
-      <h1 className="title">Kennesaw State University - Accessible Map</h1>
+        <h1 className="title">Kennesaw State University - Accessible Map</h1>
         <div className="top-bar">
           <div className="search-container">
             <MapSearch 
               onStartChange={handleStartLocationChange}
               onEndChange={handleEndLocationChange}
               onSubmit={calculateRoute}
+              onBookmarkToggle={toggleBookmarkFlyout}
               locations={campusLocations}
             />
           </div>
@@ -543,7 +535,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
                       <button
                         className={`bookmark-button ${isBookmarked ? 'bookmarked' : ''}`}
                         onClick={(e) => {
-                          e.stopPropagation(); // Prevent route selection when clicking bookmark
+                          e.stopPropagation();
                           handleBookmarkClick(route);
                         }}
                         aria-label={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
@@ -598,6 +590,11 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
               className="map-container" 
               role="application"
               aria-label="Interactive map displaying user location and navigation"
+              tabIndex={0}
+              onClick={() => {
+                setIsFlyoutOpen(false);
+                setIsBookmarkFlyoutOpen(false);
+              }}
             />
             <div className="map-controls">
               <button
