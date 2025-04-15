@@ -22,12 +22,11 @@ import wheelchairIcon from "./../assets/wheelchair-icon.png";
 import volumeIcon from "./../assets/volume-icon.png";
 import contrastIcon from "./../assets/high-contrast-icon.png";
 
-// OpenRouteService API configuration
+// OpenRouteService API
 const orsDirections = new Openrouteservice.Directions({
   api_key: '5b3ce3597851110001cf6248a1d686e75cef4e86a9782464ccdb71cf',
 });
 
-// Types
 export interface AccessibleMapProps {
   className?: string;
 }
@@ -52,8 +51,6 @@ interface RouteOption {
   duration: number; // in seconds
   coordinates: number[][];
 }
-
-// Constants
 const INITIAL_CENTER = fromLonLat([-84.5831, 34.0390]);
 
 // Load campus locations from JSON file
@@ -67,11 +64,10 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   const mapInstance = useRef<Map | null>(null);
   const vectorSourceRef = useRef(new VectorSource());
   const userMarkerRef = useRef(new Feature());
-  
   const [viewMode, setViewMode] = useState<'standard' | 'satellite'>('standard');
   const [startLocation, setStartLocation] = useState('');
   const [endLocation, setEndLocation] = useState('');
-  const [routeMode, setRouteMode] = useState<'walking' | 'wheelchair'>('walking');
+  const [routeMode, setRouteMode] = useState<'wheelchair' | 'walking'>('wheelchair');
   const [userLocation, setUserLocation] = useState<number[] | null>(null);
   const [turnByTurnDirections, setTurnByTurnDirections] = useState<TurnByTurnDirection[]>([]);
   const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);
@@ -87,29 +83,40 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   const [isRouteActive, setIsRouteActive] = useState(false);
 
   // Place accessibility markers on the map
-  const placeMarkers = useCallback((showIcons: boolean) => {
-    if (!showIcons) {
-      setShowWheelchairIcons(false);
-      vectorSourceRef.current.clear();
-      return;
+const placeMarkers = useCallback((showIcons: boolean) => {
+  const features = vectorSourceRef.current.getFeatures();
+  features.forEach(feature => {
+    // Remove only accessibility markers, not user location or route markers
+    if (feature.get('type') === 'accessibility-marker') {
+      vectorSourceRef.current.removeFeature(feature);
     }
-    campusLocations.forEach((location) => {
-      const coords = fromLonLat(location.coordinates);
-      const marker = new Feature(new Point(coords));
+  });
+  
+  if (!showIcons) {
+    setShowWheelchairIcons(false);
+    return;
+  }
+  
+  campusLocations.forEach((location) => {
+    const coords = fromLonLat(location.coordinates);
+    const marker = new Feature(new Point(coords));
 
-      marker.setStyle(
-        new Style({
-          image: new Icon({
-            src: 'https://cdn2.iconfinder.com/data/icons/wsd-map-markers-2/512/wsd_markers_97-512.png',
-            scale: 0.04,
-            anchor: [0.5, 1],
-          }),
-        })
-      );
-      vectorSourceRef.current.addFeature(marker);
-    });
-    setShowWheelchairIcons(true)
-  }, []);
+    // Identify accessibility markers
+    marker.set('type', 'accessibility-marker');
+
+    marker.setStyle(
+      new Style({
+        image: new Icon({
+          src: 'https://cdn2.iconfinder.com/data/icons/wsd-map-markers-2/512/wsd_markers_97-512.png',
+          scale: 0.04,
+          anchor: [0.5, 1],
+        }),
+      })
+    );
+    vectorSourceRef.current.addFeature(marker);
+  });
+  setShowWheelchairIcons(true);
+}, []);
 
   // Start tracking user location
   const startTracking = useCallback(() => {
@@ -128,8 +135,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   
         // Update marker position
         userMarkerRef.current.setGeometry(new Point(coords));
-  
-        // Ensure the marker is added only once
+
         if (!vectorSourceRef.current.hasFeature(userMarkerRef.current)) {
           userMarkerRef.current.setStyle(
             new Style({
@@ -154,7 +160,8 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, []); 
+  userMarkerRef.current.set('type', 'user-location');
 
   // Initialize the map
   useEffect(() => {
@@ -380,10 +387,10 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     // Zoom to fit both markers
     if (mapInstance.current) {
       const extent = [
-        Math.min(startPoint[0], endPoint[0]), // Min Longitude
-        Math.min(startPoint[1], endPoint[1]), // Min Latitude
-        Math.max(startPoint[0], endPoint[0]), // Max Longitude
-        Math.max(startPoint[1], endPoint[1]), // Max Latitude
+        Math.min(startPoint[0], endPoint[0]), 
+        Math.min(startPoint[1], endPoint[1]), 
+        Math.max(startPoint[0], endPoint[0]), 
+        Math.max(startPoint[1], endPoint[1]), 
       ];
   
       mapInstance.current.getView().fit(extent, {
@@ -491,8 +498,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
         }),
       })
     );
-    
-    // Set a property to identify this as a preview
     routeFeature.set('type', 'preview');
     
     // Add to map
@@ -500,7 +505,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   }, []);
 
   const clearPreviewRoute = useCallback(() => {
-    // Remove only preview features
     const features = vectorSourceRef.current.getFeatures();
     features.forEach(feature => {
       if (feature.get('type') === 'preview') {
@@ -562,13 +566,13 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
               >
                 {viewMode === 'standard' ? 'Satellite View' : 'Standard View'}
               </button>
-              
-              {/* New "I've Arrived" button that appears when a route is active */}
-
             </div>
           </div>
           <div className="icon-bar">
-            <a href="#" className="icon-container" onClick={() => placeMarkers(!showWheelchairIcons)} 
+            <a href="#" className="icon-container" 
+              onClick={() =>{ 
+                placeMarkers(!showWheelchairIcons);
+                toggleRouteMode();} }
               aria-label="Toggle accessible routing">
               <img className='icon' src={wheelchairIcon} alt="Accessible entrances"/>
             </a>
