@@ -1,3 +1,7 @@
+*{
+font-family: 'Avenir Next', 'Avenir', 'Helvetica Neue', 'Gilroy thin', sans-serif !important;
+}
+
 .map-content {
   display: flex;
   position: relative;
