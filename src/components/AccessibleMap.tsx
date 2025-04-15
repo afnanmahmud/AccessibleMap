@@ -13,7 +13,7 @@ import { fromLonLat } from 'ol/proj';
 import { Icon, Style, Stroke } from 'ol/style';
 import { defaults as defaultControls } from 'ol/control';
 import Openrouteservice from 'openrouteservice-js';
-import MapSearch from './MapSearch/MapSearch';
+import MapSearch, { MapSearchProps } from './MapSearch/MapSearch'; // Import MapSearchProps
 import 'ol/ol.css';
 import './AccessibleMap.css';
 import locationsData from './campuslocations.json';
@@ -73,7 +73,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   const [endLocation, setEndLocation] = useState('');
   const [routeMode, setRouteMode] = useState<'wheelchair' | 'walking'>('wheelchair');
   const [userLocation, setUserLocation] = useState<number[] | null>(null);
-  const [turnByTurnDirections, setTurnByTurnDirections] = useState<TurnByTurnDirection[]>([]);
+  const [turnByTurnDirections, setTurnByDone
   const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);
   const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
@@ -274,7 +274,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
         return;
       }
 
-      // Close bookmark flyout when opening route flyout
       setIsBookmarkFlyoutOpen(false);
 
       orsDirections
@@ -315,7 +314,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     if (isBookmarkFlyoutOpen) {
       setIsBookmarkFlyoutOpen(false);
     } else {
-      setIsFlyoutOpen(false); // Close route flyout
+      setIsFlyoutOpen(false);
       setIsBookmarkFlyoutOpen(true);
     }
   };
