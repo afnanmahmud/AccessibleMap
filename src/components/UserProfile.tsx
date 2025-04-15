@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+
+// we could import your AuthContext here
+// import { AuthContext } from '../context/AuthContext';
 
 // MenuIcon
 const MenuIcon = () => (
@@ -41,9 +44,23 @@ const SignOutIcon = () => (
   </svg>
 );
 
+// Interface for user data
+interface UserData {
+  id: string;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  highContrastMode: boolean;
+}
+
 const UserProfile: React.FC = () => {
-  const [email, setEmail] = useState("jsmith22@students.edu");
+  // User data state
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("••••••••");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [editEmail, setEditEmail] = useState(false);
   const [editPassword, setEditPassword] = useState(false);
   const [highContrastMode, setHighContrastMode] = useState(false);
@@ -52,6 +69,8 @@ const UserProfile: React.FC = () => {
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
   const [focusedElement, setFocusedElement] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   
   const navigate = useNavigate();
 
@@ -76,19 +95,191 @@ const UserProfile: React.FC = () => {
   // Check if device is in landscape orientation
   const isLandscape = windowWidth > windowHeight && isMobile;
 
+  // For production, use our authentication context or service
+  // Uncomment this when we have our authentication context set up
+  // const { user, token, logout } = useContext(AuthContext);
+  
+  // Get authenticated user info - production version
+  const getCurrentUser = () => {
+    // Temporary solution until we integrate our actual auth solution
+    // In production, this should come from our auth context or service
+    
+    // Example using an auth context:
+    // return { token: token, userId: user?.id };
+    
+    // For now, we'll use a hardcoded token for demonstration
+    // IMPORTANT: Replace this with your actual authentication solution
+    return { 
+      token: 'dummy-token', 
+      userId: 'current-user-id' 
+    };
+  };
+
+  // Function to get user initials from name
+  const getUserInitials = (firstName: string, lastName: string): string => {
+    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+  };
+
   // Fetch user profile data on component mount
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
-        const username = "johnsmith"; // Replace with actual user authentication in production
-        const response = await axios.get(`https://accessiblemap.azurewebsites.net/api/users/${username}`);
+        setIsSaving(true);
+        const auth = getCurrentUser();
+        
+        // In production, we should ensure there's proper error handling if auth is not available
+        if (!auth || !auth.token) {
+          // Handle unauthenticated users
+          setErrorMsg('Authentication required. Please log in.');
+          // In production with AuthContext: redirect to login
+          // navigate('/login');
+          setIsSaving(false);
+          return;
+        }
+
+        // Get user profile from API
+        const response = await axios.get(
+          'https://accessiblemap.azurewebsites.net/api/users/profile',
+          {
+            headers: {
+              Authorization: `Bearer ${auth.token}`
+            }
+          }
+        );
+
+        // Update state with user data
+        setUserData(response.data);
+        setEmail(response.data.email);
         setHighContrastMode(response.data.highContrastMode);
       } catch (err) {
         console.error('Failed to fetch user profile:', err);
+        setErrorMsg('Failed to load user profile. Please try again later.');
+      } finally {
+        setIsSaving(false);
       }
     };
+    
     fetchUserProfile();
   }, []);
+
+  // Handle email update
+  const handleEmailUpdate = async () => {
+    if (!userData) return;
+    
+    try {
+      setIsSaving(true);
+      setErrorMsg(null);
+      
+      const auth = getCurrentUser();
+      if (!auth || !auth.token) {
+        setErrorMsg('Authentication required. Please log in.');
+        setIsSaving(false);
+        return;
+      }
+      
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setErrorMsg('Please enter a valid email address');
+        setIsSaving(false);
+        return;
+      }
+      
+      // Update email in the database
+      await axios.post(
+        'https://accessiblemap.azurewebsites.net/api/users/update-email',
+        { email },
+        {
+          headers: {
+            Authorization: `Bearer ${auth.token}`
+          }
+        }
+      );
+      
+      // Update local state
+      setUserData(prevData => prevData ? {...prevData, email} : null);
+      setEditEmail(false);
+      setSuccessMsg('Email updated successfully');
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err) {
+      console.error('Failed to update email:', err);
+      setErrorMsg('Failed to update email. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  // Handle password update
+  const handlePasswordUpdate = async () => {
+    if (!userData) return;
+    
+    try {
+      setIsSaving(true);
+      setErrorMsg(null);
+      
+      const auth = getCurrentUser();
+      if (!auth || !auth.token) {
+        setErrorMsg('Authentication required. Please log in.');
+        setIsSaving(false);
+        return;
+      }
+      
+      // Validate password
+      if (newPassword.length < 8) {
+        setErrorMsg('Password must be at least 8 characters long');
+        setIsSaving(false);
+        return;
+      }
+      
+      if (newPassword !== confirmPassword) {
+        setErrorMsg('Passwords do not match');
+        setIsSaving(false);
+        return;
+      }
+      
+      // Update password in the database
+      await axios.post(
+        'https://accessiblemap.azurewebsites.net/api/users/update-password',
+        { 
+          currentPassword: password,
+          newPassword 
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${auth.token}`
+          }
+        }
+      );
+      
+      // Reset form and show success message
+      setPassword('••••••••');
+      setNewPassword('');
+      setConfirmPassword('');
+      setEditPassword(false);
+      setSuccessMsg('Password updated successfully');
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err) {
+      console.error('Failed to update password:', err);
+      
+      // Handle specific API errors
+      if (axios.isAxiosError(err) && err.response) {
+        // Check for specific error codes
+        if (err.response.status === 401) {
+          setErrorMsg('Current password is incorrect. Please try again.');
+        } else {
+          setErrorMsg('Failed to update password. Please try again.');
+        }
+      } else {
+        setErrorMsg('Failed to update password. Please try again.');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Toggle dropdown visibility
   const toggleDropdown = () => {
@@ -118,7 +309,52 @@ const UserProfile: React.FC = () => {
   const handleSignOut = () => {
     const confirmSignOut = window.confirm("Are you sure you want to sign out?");
     if (confirmSignOut) {
-      navigate('/map');
+      // In production, use your auth context logout function
+      // if (logout) logout();
+      
+      // For now, just navigate to login page
+      navigate('/login');
+    }
+  };
+
+  // Handle high contrast mode change
+  const handleHighContrastChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newHighContrastMode = e.target.checked;
+    setHighContrastMode(newHighContrastMode);
+    setIsSaving(true);
+    
+    try {
+      const auth = getCurrentUser();
+      if (!auth || !auth.token) {
+        setErrorMsg('Authentication required. Please log in.');
+        setHighContrastMode(!newHighContrastMode); // Revert change
+        setIsSaving(false);
+        return;
+      }
+      
+      await axios.post(
+        'https://accessiblemap.azurewebsites.net/api/users/update-preferences',
+        {
+          highContrastMode: newHighContrastMode
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${auth.token}`
+          }
+        }
+      );
+      
+      // Update local state
+      setUserData(prevData => 
+        prevData ? {...prevData, highContrastMode: newHighContrastMode} : null
+      );
+    } catch (err) {
+      console.error('Failed to update high contrast mode:', err);
+      // Revert the state if the API call fails
+      setHighContrastMode(!newHighContrastMode);
+      setErrorMsg('Failed to update preferences. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -163,33 +399,16 @@ const UserProfile: React.FC = () => {
         dropdownItemHover: {
           backgroundColor: '#333333',
         },
+        messageContainer: {
+          backgroundColor: '#222222',
+          border: '1px solid #FF9B18',
+        }
       };
     }
     return {};
   };
 
   const modeStyles = getStylesForMode(highContrastMode);
-
-  const handleHighContrastChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newHighContrastMode = e.target.checked;
-    setHighContrastMode(newHighContrastMode);
-    setIsSaving(true);
-    
-    try {
-      const username = "johnsmith"; // Replace with actual user authentication in production
-      await axios.post('https://accessiblemap-gnddadh9ghbgc9e8.eastus-01.azurewebsites.net/api/users', {
-        username,
-        email: email || "jsmith22@students.edu", // Use current email or fallback
-        highContrastMode: newHighContrastMode
-      });
-    } catch (err) {
-      console.error('Failed to update high contrast mode:', err);
-      // Optionally revert the state if the API call fails
-      setHighContrastMode(!newHighContrastMode);
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const styles: Record<string, React.CSSProperties> = {
     container: {
@@ -314,6 +533,7 @@ const UserProfile: React.FC = () => {
     },
     field: {
       marginBottom: '1.5rem',
+      position: 'relative' as 'relative',
     },
     inputGroup: {
       display: 'flex',
@@ -339,6 +559,12 @@ const UserProfile: React.FC = () => {
       outline: 'none',
       transition: 'box-shadow 0.2s, border-color 0.2s',
       boxSizing: 'border-box' as 'border-box',
+    },
+    passwordContainer: {
+      width: isMobile ? '100%' : '300px',
+      display: 'flex',
+      flexDirection: 'column' as 'column',
+      gap: '0.5rem',
     },
     inputFocus: {
       boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.25)',
@@ -456,6 +682,41 @@ const UserProfile: React.FC = () => {
       borderTopColor: 'white',
       animation: 'spin 1s linear infinite',
     },
+    errorMsg: {
+      color: '#e53e3e',
+      fontSize: '0.875rem',
+      marginTop: '0.5rem',
+      padding: '8px 12px',
+      backgroundColor: '#fed7d7',
+      borderRadius: '4px',
+      marginBottom: '0.5rem',
+      border: '1px solid #e53e3e',
+    },
+    successMsg: {
+      color: '#2f855a',
+      fontSize: '0.875rem',
+      marginTop: '0.5rem',
+      padding: '8px 12px',
+      backgroundColor: '#c6f6d5',
+      borderRadius: '4px',
+      marginBottom: '0.5rem',
+      border: '1px solid #2f855a',
+    },
+    passwordField: {
+      fontSize: '1rem',
+      padding: '12px 15px',
+      width: '100%',
+      borderRadius: '4px',
+      border: '1px solid #cccccc',
+      outline: 'none',
+      transition: 'box-shadow 0.2s, border-color 0.2s',
+      boxSizing: 'border-box' as 'border-box',
+    },
+    buttonContainer: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      marginTop: '0.75rem',
+    }
   };
 
   // Add CSS keyframes for spinner animation
@@ -471,6 +732,20 @@ const UserProfile: React.FC = () => {
       document.head.removeChild(styleEl);
     };
   }, []);
+
+  // Loading state while fetching user data
+  if (!userData && !errorMsg) {
+    return (
+      <div style={{ ...styles.container, ...(modeStyles.container || {}) }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={styles.loadingSpinner}></div>
+            <p style={{ ...(modeStyles.text || {}), marginTop: '1rem' }}>Loading user profile...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ ...styles.container, ...(modeStyles.container || {}) }}>
@@ -577,13 +852,32 @@ const UserProfile: React.FC = () => {
       <div style={styles.profileInfo}>
         <div style={styles.profileContainer}>
           <div style={styles.avatar}>
-            <span>JS</span>
+            <span>{userData ? getUserInitials(userData.firstName, userData.lastName) : ''}</span>
           </div>
           <h2 style={{ ...styles.name, ...(modeStyles.text || {}) }}>
-            John Smith
+            {userData ? `${userData.firstName} ${userData.lastName}` : ''}
           </h2>
         </div>
       </div>
+
+      {/* Display error/success messages */}
+      {errorMsg && (
+        <div style={{ 
+          ...styles.errorMsg, 
+          ...(highContrastMode ? { backgroundColor: '#500000', borderColor: '#FF6B6B' } : {}) 
+        }}>
+          {errorMsg}
+        </div>
+      )}
+      
+      {successMsg && (
+        <div style={{ 
+          ...styles.successMsg, 
+          ...(highContrastMode ? { backgroundColor: '#004D40', borderColor: '#00E676' } : {}) 
+        }}>
+          {successMsg}
+        </div>
+      )}
 
       {/* Account Settings */}
       <div style={styles.settingsSection}>
@@ -616,7 +910,13 @@ const UserProfile: React.FC = () => {
                 ...(focusedElement === 'editEmailBtn' ? styles.editButtonFocus : {}),
                 ...(modeStyles.editButton || {})
               }}
-              onClick={() => setEditEmail(!editEmail)}
+              onClick={() => {
+                if (editEmail) {
+                  handleEmailUpdate();
+                } else {
+                  setEditEmail(true);
+                }
+              }}
               onFocus={() => setFocusedElement('editEmailBtn')}
               onBlur={() => setFocusedElement(null)}
               onMouseOver={(e) => {
@@ -631,6 +931,7 @@ const UserProfile: React.FC = () => {
               onMouseUp={(e) => {
                 e.currentTarget.style.transform = 'none';
               }}
+              disabled={isSaving}
               aria-label={editEmail ? "Save Email" : "Edit Email"}
             >
               {editEmail ? "Save" : "Edit"}
@@ -646,46 +947,137 @@ const UserProfile: React.FC = () => {
             >
               Password
             </label>
-            <input
-              id="password"
-              style={{
-                ...styles.input,
-                ...(focusedElement === 'password' ? styles.inputFocus : {}),
-                ...(modeStyles.input || {})
-              }}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={!editPassword}
-              onFocus={() => setFocusedElement('password')}
-              onBlur={() => setFocusedElement(null)}
-              aria-label="Password"
-            />
-            <button
-              style={{
-                ...styles.editButton,
-                ...(focusedElement === 'editPasswordBtn' ? styles.editButtonFocus : {}),
-                ...(modeStyles.editButton || {})
-              }}
-              onClick={() => setEditPassword(!editPassword)}
-              onFocus={() => setFocusedElement('editPasswordBtn')}
-              onBlur={() => setFocusedElement(null)}
-              onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = (styles.editButtonHover as any).backgroundColor;
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = (modeStyles.editButton || styles.editButton).backgroundColor as string;
-              }}
-              onMouseDown={(e) => {
-                e.currentTarget.style.transform = (styles.editButtonActive as any).transform;
-              }}
-              onMouseUp={(e) => {
-                e.currentTarget.style.transform = 'none';
-              }}
-              aria-label={editPassword ? "Save Password" : "Edit Password"}
-            >
-              {editPassword ? "Save" : "Edit"}
-            </button>
+            
+            {!editPassword ? (
+              <>
+                <input
+                  id="password"
+                  style={{
+                    ...styles.input,
+                    ...(focusedElement === 'password' ? styles.inputFocus : {}),
+                    ...(modeStyles.input || {})
+                  }}
+                  type="password"
+                  value={password}
+                  disabled={true}
+                  onFocus={() => setFocusedElement('password')}
+                  onBlur={() => setFocusedElement(null)}
+                  aria-label="Password"
+                />
+                <button
+                  style={{
+                    ...styles.editButton,
+                    ...(focusedElement === 'editPasswordBtn' ? styles.editButtonFocus : {}),
+                    ...(modeStyles.editButton || {})
+                  }}
+                  onClick={() => setEditPassword(true)}
+                  onFocus={() => setFocusedElement('editPasswordBtn')}
+                  onBlur={() => setFocusedElement(null)}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = (styles.editButtonHover as any).backgroundColor;
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = (modeStyles.editButton || styles.editButton).backgroundColor as string;
+                  }}
+                  onMouseDown={(e) => {
+                    e.currentTarget.style.transform = (styles.editButtonActive as any).transform;
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.transform = 'none';
+                  }}
+                  disabled={isSaving}
+                  aria-label="Edit Password"
+                >
+                  Edit
+                </button>
+              </>
+            ) : (
+              <div style={styles.passwordContainer}>
+                <input
+                  id="current-password"
+                  style={{
+                    ...styles.passwordField,
+                    ...(focusedElement === 'currentPassword' ? styles.inputFocus : {}),
+                    ...(modeStyles.input || {})
+                  }}
+                  type="password"
+                  placeholder="Current password"
+                  value={password === "••••••••" ? "" : password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setFocusedElement('currentPassword')}
+                  onBlur={() => setFocusedElement(null)}
+                  aria-label="Current Password"
+                />
+                
+                <input
+                  id="new-password"
+                  style={{
+                    ...styles.passwordField,
+                    ...(focusedElement === 'newPassword' ? styles.inputFocus : {}),
+                    ...(modeStyles.input || {})
+                  }}
+                  type="password"
+                  placeholder="New password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  onFocus={() => setFocusedElement('newPassword')}
+                  onBlur={() => setFocusedElement(null)}
+                  aria-label="New Password"
+                />
+                
+                <input
+                  id="confirm-password"
+                  style={{
+                    ...styles.passwordField,
+                    ...(focusedElement === 'confirmPassword' ? styles.inputFocus : {}),
+                    ...(modeStyles.input || {})
+                  }}
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onFocus={() => setFocusedElement('confirmPassword')}
+                  onBlur={() => setFocusedElement(null)}
+                  aria-label="Confirm New Password"
+                />
+                
+                <div style={styles.buttonContainer}>
+                  <button
+                    style={{
+                      ...styles.editButton,
+                      marginRight: '8px',
+                      backgroundColor: '#e0e0e0',
+                      ...(modeStyles.editButton ? { backgroundColor: '#333333', color: '#ffffff' } : {})
+                    }}
+                    onClick={() => {
+                      setEditPassword(false);
+                      setPassword("••••••••");
+                      setNewPassword("");
+                      setConfirmPassword("");
+                      setErrorMsg(null);
+                    }}
+                    disabled={isSaving}
+                  >
+                    Cancel
+                  </button>
+                  
+                  <button
+                    style={{
+                      ...styles.editButton,
+                      ...(focusedElement === 'savePasswordBtn' ? styles.editButtonFocus : {}),
+                      ...(modeStyles.editButton || {})
+                    }}
+                    onClick={handlePasswordUpdate}
+                    onFocus={() => setFocusedElement('savePasswordBtn')}
+                    onBlur={() => setFocusedElement(null)}
+                    disabled={isSaving || !password || !newPassword || !confirmPassword}
+                    aria-label="Save Password"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
