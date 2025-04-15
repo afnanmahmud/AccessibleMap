@@ -518,8 +518,10 @@ const UserProfile: React.FC = () => {
               }}
               role="menu"
             >
-              <Link
-                to="/help"
+              <a
+                href="/Help.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
                 style={{
                   ...styles.dropdownItem,
                   ...(focusedElement === 'helpLink' ? styles.dropdownItemFocus : {}),
@@ -537,7 +539,7 @@ const UserProfile: React.FC = () => {
               >
                 <HelpIcon />
                 Help
-              </Link>
+              </a>
               
               <div
                 style={{
