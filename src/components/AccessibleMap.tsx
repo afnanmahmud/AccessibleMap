@@ -21,7 +21,7 @@ import { Coordinate } from 'ol/coordinate';
 import wheelchairIcon from "./../assets/wheelchair-icon.png";
 import volumeIcon from "./../assets/volume-icon.png";
 import contrastIcon from "./../assets/high-contrast-icon.png";
-import bookmarkIcon from "./../assets/bookmark-icon.png";
+import bookmarkIcon from "./../assets/bookmark.png";
 
 // OpenRouteService API
 const orsDirections = new Openrouteservice.Directions({
