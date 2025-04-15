@@ -67,7 +67,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   const mapInstance = useRef<Map | null>(null);
   const vectorSourceRef = useRef(new VectorSource());
   const userMarkerRef = useRef(new Feature());
-
+  
   const [viewMode, setViewMode] = useState<'standard' | 'satellite'>('standard');
   const [startLocation, setStartLocation] = useState('');
   const [endLocation, setEndLocation] = useState('');
@@ -82,6 +82,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   // New state for step-by-step navigation
   const [currentDirectionIndex, setCurrentDirectionIndex] = useState(0);
   const [stepByStepMode, setStepByStepMode] = useState(false);
+  
+  // New state to track if a route is active
+  const [isRouteActive, setIsRouteActive] = useState(false);
 
   // Place accessibility markers on the map
   const placeMarkers = useCallback((showIcons: boolean) => {
@@ -120,12 +123,12 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
         const { latitude, longitude } = position.coords;
         const lonLat = [longitude, latitude];
         setUserLocation(lonLat as [number, number]);
-
+        
         const coords = fromLonLat(lonLat);
-
+  
         // Update marker position
         userMarkerRef.current.setGeometry(new Point(coords));
-
+  
         // Ensure the marker is added only once
         if (!vectorSourceRef.current.hasFeature(userMarkerRef.current)) {
           userMarkerRef.current.setStyle(
@@ -138,7 +141,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           );
           vectorSourceRef.current.addFeature(userMarkerRef.current);
         }
-
+  
         // Follow user location
         if (mapInstance.current) {
           mapInstance.current.getView().setCenter(coords);
@@ -157,13 +160,13 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   useEffect(() => {
     if (!mapRef.current) return;
 
-    const vectorLayer = new VectorLayer({
-      source: vectorSourceRef.current
+    const vectorLayer = new VectorLayer({ 
+      source: vectorSourceRef.current 
     });
 
-    const standardLayer = new TileLayer({
-      source: new OSM(),
-      visible: true
+    const standardLayer = new TileLayer({ 
+      source: new OSM(), 
+      visible: true 
     });
 
     const satelliteLayer = new TileLayer({
@@ -221,15 +224,15 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   // Find location coordinates by name
   const findLocationByName = useCallback((query: string): number[] | null => {
     if (!query || query.toLowerCase() === 'my location') return null;
-
+  
     const lowerQuery = query.toLowerCase();
-
-    const exactMatch = campusLocations.find(loc =>
+  
+    const exactMatch = campusLocations.find(loc => 
       loc.name.toLowerCase() === lowerQuery
     );
     if (exactMatch) return exactMatch.coordinates;
-
-    const partialMatch = campusLocations.find(loc =>
+  
+    const partialMatch = campusLocations.find(loc => 
       loc.name.toLowerCase().includes(lowerQuery)
     );
     return partialMatch ? partialMatch.coordinates : null;
@@ -247,6 +250,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
     setTurnByTurnDirections([]);
     setCurrentDirectionIndex(0);
     setStepByStepMode(false);
+    setIsRouteActive(false);
+    setStartLocation('');
+    setEndLocation('');
   }, []);
 
   // Calculate route options when start and end locations are set
@@ -256,7 +262,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
       setRouteOptions([]);
       return;
     }
-
+    
     const timer = setTimeout(() => {
       let startCoords;
       if (startLocation) {
@@ -315,32 +321,32 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
       alert('Please select a route to start.');
       return;
     }
-
+  
     clearRoutes();
-
+  
     let startCoords;
     if (startLocation && startLocation.toLowerCase() !== 'my location') {
       startCoords = findLocationByName(startLocation);
     } else if (userLocation) {
       startCoords = userLocation;
     }
-
+  
     if (!startCoords) {
       alert('Unable to determine your current location. Please enter a start location.');
       return;
     }
-
+  
     const endCoords = findLocationByName(endLocation);
-
+  
     if (!endCoords) {
       alert('Please enter a valid end location');
       return;
     }
-
+  
     // Convert coordinates to OpenLayers format
     const startPoint = fromLonLat(startCoords);
     const endPoint = fromLonLat(endCoords);
-
+  
     // Create start marker (blue)
     const startMarker = new Feature(new Point(startPoint));
     startMarker.setStyle(
@@ -353,7 +359,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
       })
     );
     startMarker.set('type', 'marker');
-
+  
     // Create end marker (red)
     const endMarker = new Feature(new Point(endPoint));
     endMarker.setStyle(
@@ -366,11 +372,11 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
       })
     );
     endMarker.set('type', 'marker');
-
+  
     // Add markers to the vector source
     vectorSourceRef.current.addFeature(startMarker);
     vectorSourceRef.current.addFeature(endMarker);
-
+  
     // Zoom to fit both markers
     if (mapInstance.current) {
       const extent = [
@@ -379,14 +385,14 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
         Math.max(startPoint[0], endPoint[0]), // Max Longitude
         Math.max(startPoint[1], endPoint[1]), // Max Latitude
       ];
-
+  
       mapInstance.current.getView().fit(extent, {
         padding: [50, 50, 50, 50],
         duration: 1000,
         maxZoom: 18,
       });
     }
-
+  
     // Display the selected route
     const selectedRoute = routeOptions.find((route) => route.id === selectedRouteId);
     if (selectedRoute) {
@@ -395,7 +401,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           selectedRoute.coordinates.map((coord: number[]) => fromLonLat(coord))
         ),
       });
-
+  
       routeFeature.setStyle(
         new Style({
           stroke: new Stroke({
@@ -405,9 +411,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           }),
         })
       );
-
+  
       vectorSourceRef.current.addFeature(routeFeature);
-
+  
       // Set turn-by-turn directions
       if (selectedRoute.steps) {
         const directions: TurnByTurnDirection[] = selectedRoute.steps.map((step: any) => ({
@@ -416,14 +422,27 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           distance: step.distance,
           duration: step.duration
         }));
-
+        
         setTurnByTurnDirections(directions);
         setCurrentDirectionIndex(0);
       }
     }
+    
+    // Set route as active
+    setIsRouteActive(true);
+    
     // Close the flyout
     setIsFlyoutOpen(false);
   }, [startLocation, endLocation, selectedRouteId, routeOptions, clearRoutes, findLocationByName, userLocation, routeMode]);
+
+  // Handle arrived at destination (new function)
+  const handleArrived = useCallback(() => {
+    // Show a congratulatory message
+    alert('You have arrived at your destination.');
+    
+    // Clear the route
+    clearRoutes();
+  }, [clearRoutes]);
 
   // Handle changing locations
   const handleStartLocationChange = useCallback((value: string) => {
@@ -469,14 +488,13 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
         stroke: new Stroke({
           color: 'rgba(37, 99, 235, 0.5)', // Semi-transparent blue
           width: 4,
-
         }),
       })
     );
-
+    
     // Set a property to identify this as a preview
     routeFeature.set('type', 'preview');
-
+    
     // Add to map
     vectorSourceRef.current.addFeature(routeFeature);
   }, []);
@@ -494,10 +512,10 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   return (
     <div className="map-wrapper">
       <div className="map-page">
-        <h1 className="title">Kennesaw State University - Accessible Map</h1>
+      <h1 className="title">Kennesaw State University - Accessible Map</h1>
         <div className="top-bar">
           <div className="search-container">
-            <MapSearch
+            <MapSearch 
               onStartChange={handleStartLocationChange}
               onEndChange={handleEndLocationChange}
               onSubmit={calculateRoute}
@@ -530,9 +548,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           )}
 
           <div className={`map-root ${className || ''} ${isFlyoutOpen ? 'shifted' : ''}`}>
-            <div
-              ref={mapRef}
-              className="map-container"
+            <div 
+              ref={mapRef} 
+              className="map-container" 
               role="application"
               aria-label="Interactive map displaying user location and navigation"
             />
@@ -544,6 +562,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
               >
                 {viewMode === 'standard' ? 'Satellite View' : 'Standard View'}
               </button>
+              
+              {/* New "I've Arrived" button that appears when a route is active */}
+
             </div>
           </div>
           <div className="icon-bar">
@@ -564,12 +585,33 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           <div className="turn-by-turn-directions">
             <div className="directions-header">
               <h3>Directions</h3>
-              <button
-                className="toggle-view-button"
-                onClick={toggleDirectionMode}
-              >
-                {stepByStepMode ? 'Show All' : 'Step by Step'}
-              </button>
+              <div className="directions-controls">
+                {/* Added Cancel Route button in the directions header */}
+                {isRouteActive && (
+                <button
+                  type="button"
+                  onClick={handleArrived}
+                  className="arrived-button"
+                  aria-label="Indicate that you have reached your destination"
+                >
+                  I've Arrived
+                </button>
+              )}
+                <button 
+                  className="cancel-route-button"
+                  onClick={clearRoutes}
+                  aria-label="Cancel navigation and clear the route"
+                >
+                  Cancel Route
+                </button>
+
+                <button 
+                  className="toggle-view-button"
+                  onClick={toggleDirectionMode}
+                >
+                  {stepByStepMode ? 'Show All' : 'Step by Step'}
+                </button>
+              </div>
             </div>
 
             {stepByStepMode ? (
@@ -617,7 +659,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
             )}
           </div>
         )}
-
         <div className='footer'>
           <div className='footer-section'>
             <p className="section-heading">Contact Info</p>
@@ -678,7 +719,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           </div>
         </div>
       </div>
-    </div >
+    </div>
   );
 };
 

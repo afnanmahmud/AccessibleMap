@@ -152,7 +152,6 @@
    cursor: pointer;
    font-size: 0.9rem;
  }
-
  .toggle-view-button:hover {
    background: #1d4ed8;
  }
@@ -338,3 +337,105 @@
      width: 93%;
    }
  }
+.direction-details {
+  display: block;
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-top: 4px;
+}
+.map-controls {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.arrived-button {
+  padding: 6px 12px;
+  background-color: #10b981; /* Green color for arrival */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.arrived-button:hover {
+  background-color: #059669;
+}
+
+.directions-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.cancel-route-button {
+  padding: 6px 12px;
+  background-color: red; /* Red color for cancellation */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.cancel-route-button:hover {
+  background-color: #dc2626;
+}
+
+.directions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+/* Add these to your AccessibleMap.css file */
+
+.map-controls {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.arrived-button {
+  padding: 6px 12px;
+  background-color: #10b981; /* Green color for arrival */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.arrived-button:hover {
+  background-color: #059669;
+}
+
+.directions-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.cancel-route-button {
+  padding: 6px 12px;
+  background-color: #ef4444; /* Red color for cancellation */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.cancel-route-button:hover {
+  background-color: #dc2626;
+}
+
+.directions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
