@@ -207,12 +207,14 @@ const MapSearch: React.FC<MapSearchProps> = ({ onStartChange, onEndChange, onSub
               >
                 Preferences
               </button>
-              <button
+              <a
                 className="dropdown-item"
-                onClick={() => handleNavigation('/help')}
+                href="/Help.pdf"
+                target="_blank"
+                rel="noopener roreferrer"
               >
                 Help
-              </button>
+              </a>
               <button
                 className="dropdown-item"
                 onClick={() => handleNavigation('/login')}
