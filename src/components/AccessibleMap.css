@@ -84,14 +84,14 @@
 .bookmark-flyout {
   width: 300px;
   background-color: white;
-  border-left: 1px solid #ccc; /* Changed from border-right */
-  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1); /* Shadow on the left */
+  border-left: 1px solid #ccc;
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
   padding: 20px;
   position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 0; /* Changed from left: 0 */
-  z-index: 1000;
+  top: 100px; /* Adjust based on top-bar height */
+  bottom: 50px; /* Adjust based on icon-bar height */
+  right: 0;
+  z-index: 900; /* Below top-bar and icon-bar */
   overflow-y: auto;
   transition: transform 0.3s ease;
 }
@@ -136,7 +136,7 @@
   width: 100%;
   min-height: 600px;
   background-color: #f5f5f5;
-  transition: margin-right 0.3s ease; /* Changed from margin-left */
+  transition: margin-right 0.3s ease;
 }
 
 .map-root.shifted {
@@ -144,7 +144,7 @@
 }
 
 .map-root.bookmark-shifted {
-  margin-right: 300px; /* Changed from margin-left */
+  margin-right: 300px;
 }
 
 .map-container {
@@ -182,6 +182,7 @@
   flex-direction: row;
   align-items: center;
   padding: 0 3rem 0 0;
+  z-index: 1100; /* Above flyouts */
 }
 
 .search-container {
@@ -377,6 +378,7 @@
   border-radius: 10px;
   bottom: 0px;
   right: 0px;
+  z-index: 1100; /* Above flyouts */
 }
 
 .icon-bar a {
