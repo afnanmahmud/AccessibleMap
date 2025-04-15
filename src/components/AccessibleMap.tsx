@@ -18,6 +18,9 @@ import 'ol/ol.css';
 import './AccessibleMap.css';
 import locationsData from './campuslocations.json';
 import { Coordinate } from 'ol/coordinate';
+import wheelchairIcon from "./../assets/wheelchair-icon.png";
+import volumeIcon from "./../assets/volume-icon.png";
+import contrastIcon from "./../assets/high-contrast-icon.png";
 
 // OpenRouteService API configuration
 const orsDirections = new Openrouteservice.Directions({
@@ -74,13 +77,19 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);
   const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
-  
+  const [showWheelchairIcons, setShowWheelchairIcons] = useState(true);
+
   // New state for step-by-step navigation
   const [currentDirectionIndex, setCurrentDirectionIndex] = useState(0);
   const [stepByStepMode, setStepByStepMode] = useState(false);
 
   // Place accessibility markers on the map
-  const placeMarkers = useCallback(() => {
+  const placeMarkers = useCallback((showIcons: boolean) => {
+    if (!showIcons) {
+      setShowWheelchairIcons(false);
+      vectorSourceRef.current.clear();
+      return;
+    }
     campusLocations.forEach((location) => {
       const coords = fromLonLat(location.coordinates);
       const marker = new Feature(new Point(coords));
@@ -94,9 +103,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           }),
         })
       );
-
       vectorSourceRef.current.addFeature(marker);
     });
+    setShowWheelchairIcons(true)
   }, []);
 
   // Start tracking user location
@@ -176,7 +185,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
       controls: defaultControls(),
     });
     startTracking();
-    placeMarkers();
+    placeMarkers(showWheelchairIcons);
     return () => {
       if (mapInstance.current) {
         mapInstance.current.setTarget(undefined);
@@ -372,9 +381,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
       ];
 
       mapInstance.current.getView().fit(extent, {
-        padding: [50, 50, 50, 50], 
-        duration: 1000, 
-        maxZoom: 18, 
+        padding: [50, 50, 50, 50],
+        duration: 1000,
+        maxZoom: 18,
       });
     }
 
@@ -444,43 +453,43 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   }, [stepByStepMode]);
 
   // Add these functions to your component
-const previewRoute = useCallback((route: { coordinates: Coordinate[]; }) => {
-  // Clear any existing preview
-  clearPreviewRoute();
-  
-  // Create a preview line with a distinct style
-  const routeFeature = new Feature({
-    geometry: new LineString(
-      route.coordinates.map((coord: Coordinate) => fromLonLat(coord))
-    ),
-  });
+  const previewRoute = useCallback((route: { coordinates: Coordinate[]; }) => {
+    // Clear any existing preview
+    clearPreviewRoute();
 
-  routeFeature.setStyle(
-    new Style({
-      stroke: new Stroke({
-        color: 'rgba(37, 99, 235, 0.5)', // Semi-transparent blue
-        width: 4,
-        
-      }),
-    })
-  );
-  
-  // Set a property to identify this as a preview
-  routeFeature.set('type', 'preview');
-  
-  // Add to map
-  vectorSourceRef.current.addFeature(routeFeature);
-}, []);
+    // Create a preview line with a distinct style
+    const routeFeature = new Feature({
+      geometry: new LineString(
+        route.coordinates.map((coord: Coordinate) => fromLonLat(coord))
+      ),
+    });
 
-const clearPreviewRoute = useCallback(() => {
-  // Remove only preview features
-  const features = vectorSourceRef.current.getFeatures();
-  features.forEach(feature => {
-    if (feature.get('type') === 'preview') {
-      vectorSourceRef.current.removeFeature(feature);
-    }
-  });
-}, []);
+    routeFeature.setStyle(
+      new Style({
+        stroke: new Stroke({
+          color: 'rgba(37, 99, 235, 0.5)', // Semi-transparent blue
+          width: 4,
+
+        }),
+      })
+    );
+
+    // Set a property to identify this as a preview
+    routeFeature.set('type', 'preview');
+
+    // Add to map
+    vectorSourceRef.current.addFeature(routeFeature);
+  }, []);
+
+  const clearPreviewRoute = useCallback(() => {
+    // Remove only preview features
+    const features = vectorSourceRef.current.getFeatures();
+    features.forEach(feature => {
+      if (feature.get('type') === 'preview') {
+        vectorSourceRef.current.removeFeature(feature);
+      }
+    });
+  }, []);
 
   return (
     <div className="map-wrapper">
@@ -501,9 +510,9 @@ const clearPreviewRoute = useCallback(() => {
           {isFlyoutOpen && (
             <div className="route-flyout">
               <h2>Route Options</h2>
-              
+
               {routeOptions.map((route) => (
-                
+
                 <div
                   key={route.id}
                   className={`route-option ${selectedRouteId === route.id ? 'selected' : ''}`}
@@ -537,21 +546,32 @@ const clearPreviewRoute = useCallback(() => {
               </button>
             </div>
           </div>
+          <div className="icon-bar">
+            <a href="#" className="icon-container" onClick={() => placeMarkers(!showWheelchairIcons)} >
+              <img className='icon' src={wheelchairIcon} />
+            </a>
+            <a href="#" className="icon-container">
+              <img className='icon' src={volumeIcon} />
+            </a>
+            <a href="#" className="icon-container">
+              <img className='icon' src={contrastIcon} />
+            </a>
+          </div>
         </div>
-        
+
         {/* Turn-by-Turn Directions Display */}
         {turnByTurnDirections.length > 0 && (
           <div className="turn-by-turn-directions">
             <div className="directions-header">
               <h3>Directions</h3>
-              <button 
+              <button
                 className="toggle-view-button"
                 onClick={toggleDirectionMode}
               >
                 {stepByStepMode ? 'Show All' : 'Step by Step'}
               </button>
             </div>
-            
+
             {stepByStepMode ? (
               <div className="step-by-step-view">
                 <div className="current-step">
@@ -562,7 +582,7 @@ const clearPreviewRoute = useCallback(() => {
                   </p>
                 </div>
                 <div className="step-controls">
-                  <button 
+                  <button
                     onClick={prevDirection}
                     disabled={currentDirectionIndex === 0}
                     className="step-button"
@@ -572,7 +592,7 @@ const clearPreviewRoute = useCallback(() => {
                   <span className="step-counter">
                     {currentDirectionIndex + 1} of {turnByTurnDirections.length}
                   </span>
-                  <button 
+                  <button
                     onClick={nextDirection}
                     disabled={currentDirectionIndex === turnByTurnDirections.length - 1}
                     className="step-button"
@@ -586,9 +606,9 @@ const clearPreviewRoute = useCallback(() => {
                 {turnByTurnDirections.map((direction, index) => (
                   <li key={index} className={index === currentDirectionIndex ? 'current-direction' : ''}>
                     <span className="direction-number">{index + 1}.</span>
-                    {direction.instruction} 
+                    {direction.instruction}
                     <span className="direction-details">
-                      (Distance: {(direction.distance / 1609.34).toFixed(2)} mi, 
+                      (Distance: {(direction.distance / 1609.34).toFixed(2)} mi,
                       Duration: {(direction.duration / 60).toFixed(1)} min)
                     </span>
                   </li>
