@@ -18,6 +18,9 @@ import 'ol/ol.css';
 import './AccessibleMap.css';
 import locationsData from './campuslocations.json';
 import { Coordinate } from 'ol/coordinate';
+import wheelchairIcon from "./../assets/wheelchair-icon.png";
+import volumeIcon from "./../assets/volume-icon.png";
+import contrastIcon from "./../assets/high-contrast-icon.png";
 
 // OpenRouteService API configuration
 const orsDirections = new Openrouteservice.Directions({
@@ -74,7 +77,8 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);
   const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
-  
+  const [showWheelchairIcons, setShowWheelchairIcons] = useState(true);
+
   // New state for step-by-step navigation
   const [currentDirectionIndex, setCurrentDirectionIndex] = useState(0);
   const [stepByStepMode, setStepByStepMode] = useState(false);
@@ -83,7 +87,12 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   const [isRouteActive, setIsRouteActive] = useState(false);
 
   // Place accessibility markers on the map
-  const placeMarkers = useCallback(() => {
+  const placeMarkers = useCallback((showIcons: boolean) => {
+    if (!showIcons) {
+      setShowWheelchairIcons(false);
+      vectorSourceRef.current.clear();
+      return;
+    }
     campusLocations.forEach((location) => {
       const coords = fromLonLat(location.coordinates);
       const marker = new Feature(new Point(coords));
@@ -97,9 +106,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           }),
         })
       );
-
       vectorSourceRef.current.addFeature(marker);
     });
+    setShowWheelchairIcons(true)
   }, []);
 
   // Start tracking user location
@@ -179,7 +188,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
       controls: defaultControls(),
     });
     startTracking();
-    placeMarkers();
+    placeMarkers(showWheelchairIcons);
     return () => {
       if (mapInstance.current) {
         mapInstance.current.setTarget(undefined);
@@ -378,9 +387,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
       ];
   
       mapInstance.current.getView().fit(extent, {
-        padding: [50, 50, 50, 50], 
-        duration: 1000, 
-        maxZoom: 18, 
+        padding: [50, 50, 50, 50],
+        duration: 1000,
+        maxZoom: 18,
       });
     }
   
@@ -466,7 +475,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   const previewRoute = useCallback((route: { coordinates: Coordinate[]; }) => {
     // Clear any existing preview
     clearPreviewRoute();
-    
+
     // Create a preview line with a distinct style
     const routeFeature = new Feature({
       geometry: new LineString(
@@ -479,7 +488,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
         stroke: new Stroke({
           color: 'rgba(37, 99, 235, 0.5)', // Semi-transparent blue
           width: 4,
-          
         }),
       })
     );
@@ -520,9 +528,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
           {isFlyoutOpen && (
             <div className="route-flyout">
               <h2>Route Options</h2>
-              
+
               {routeOptions.map((route) => (
-                
+
                 <div
                   key={route.id}
                   className={`route-option ${selectedRouteId === route.id ? 'selected' : ''}`}
@@ -559,8 +567,19 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
 
             </div>
           </div>
+          <div className="icon-bar">
+            <a href="#" className="icon-container" onClick={() => placeMarkers(!showWheelchairIcons)} >
+              <img className='icon' src={wheelchairIcon} />
+            </a>
+            <a href="#" className="icon-container">
+              <img className='icon' src={volumeIcon} />
+            </a>
+            <a href="#" className="icon-container">
+              <img className='icon' src={contrastIcon} />
+            </a>
+          </div>
         </div>
-        
+
         {/* Turn-by-Turn Directions Display */}
         {turnByTurnDirections.length > 0 && (
           <div className="turn-by-turn-directions">
@@ -594,7 +613,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
                 </button>
               </div>
             </div>
-            
+
             {stepByStepMode ? (
               <div className="step-by-step-view">
                 <div className="current-step">
@@ -605,7 +624,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
                   </p>
                 </div>
                 <div className="step-controls">
-                  <button 
+                  <button
                     onClick={prevDirection}
                     disabled={currentDirectionIndex === 0}
                     className="step-button"
@@ -615,7 +634,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
                   <span className="step-counter">
                     {currentDirectionIndex + 1} of {turnByTurnDirections.length}
                   </span>
-                  <button 
+                  <button
                     onClick={nextDirection}
                     disabled={currentDirectionIndex === turnByTurnDirections.length - 1}
                     className="step-button"
@@ -629,9 +648,9 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
                 {turnByTurnDirections.map((direction, index) => (
                   <li key={index} className={index === currentDirectionIndex ? 'current-direction' : ''}>
                     <span className="direction-number">{index + 1}.</span>
-                    {direction.instruction} 
+                    {direction.instruction}
                     <span className="direction-details">
-                      (Distance: {(direction.distance / 1609.34).toFixed(2)} mi, 
+                      (Distance: {(direction.distance / 1609.34).toFixed(2)} mi,
                       Duration: {(direction.duration / 60).toFixed(1)} min)
                     </span>
                   </li>

@@ -292,6 +292,42 @@
    margin-right: 5%;
  }
 
+ .icon-bar {
+   display: flex;
+   width: auto;
+   overflow: auto;
+   position: absolute;
+   background-color: white;
+   border: 1px solid black;
+   border-radius: 10px;
+   bottom: 0px;
+   right: 0px;
+ }
+
+ .icon-bar a {
+   float: left;
+   padding: 0 2rem;
+   text-align: center;
+   width: 33.333%;
+   transition: all 0.3s ease;
+   color: white;
+   font-size: 36px;
+   justify-content: center;
+   align-items: center;
+   display: flex;
+   padding: 0.5rem 2rem;
+ }
+
+ .icon-bar a:hover {
+   background-color: lightgrey;
+ }
+
+ .icon {
+   height: 33px;
+   width: 33px;
+   margin: 0;
+ }
+
  @media screen and (max-width: 475px) {
    .footer {
      flex-direction: column;
