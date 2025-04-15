@@ -538,7 +538,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
                   >
                     <div className="route-header">
                       <h3>
-                        <span className="walking-icon">🚶</span>
                         {startLocation || 'My Location'} to {endLocation}
                       </h3>
                       <button
@@ -582,7 +581,6 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
                     }}
                   >
                     <h3>
-                      <span className="walking-icon">🚶</span>
                       {route.startLocation} to {route.endLocation}
                     </h3>
                     <p>Distance: {(route.distance / 1000).toFixed(2)} km</p>
