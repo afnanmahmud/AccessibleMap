@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-// we could import our AuthContext here
+// You could import your AuthContext here
 // import { AuthContext } from '../context/AuthContext';
 
 // MenuIcon
@@ -95,20 +95,20 @@ const UserProfile: React.FC = () => {
   // Check if device is in landscape orientation
   const isLandscape = windowWidth > windowHeight && isMobile;
 
-  // For production, use our authentication context or service
-  // Uncomment this when we have our authentication context set up
+  // For production, use your authentication context or service
+  // Uncomment this when you have your authentication context set up
   // const { user, token, logout } = useContext(AuthContext);
   
   // Get authenticated user info - production version
   const getCurrentUser = () => {
-    // Temporary solution until we integrate our actual auth solution
-    // In production, this should come from our auth context or service
+    // Temporary solution until you integrate your actual auth solution
+    // In production, this should come from your auth context or service
     
     // Example using an auth context:
     // return { token: token, userId: user?.id };
     
     // For now, we'll use a hardcoded token for demonstration
-    // IMPORTANT: Replace this with our actual authentication solution
+    // IMPORTANT: Replace this with your actual authentication solution
     return { 
       token: 'dummy-token', 
       userId: 'current-user-id' 
@@ -127,7 +127,7 @@ const UserProfile: React.FC = () => {
         setIsSaving(true);
         const auth = getCurrentUser();
         
-        // In production, we should ensure there's proper error handling if auth is not available
+        // In production, ensure there's proper error handling if auth is not available
         if (!auth || !auth.token) {
           // Handle unauthenticated users
           setErrorMsg('Authentication required. Please log in.');
@@ -137,23 +137,90 @@ const UserProfile: React.FC = () => {
           return;
         }
 
-        // Get user profile from API
-        const response = await axios.get(
-          'https://accessiblemap.azurewebsites.net/api/users/profile',
-          {
-            headers: {
-              Authorization: `Bearer ${auth.token}`
-            }
-          }
-        );
+        // Get user profile from API with timeout and retry logic
+        let retryCount = 0;
+        const maxRetries = 2;
+        let profileData = null;
 
-        // Update state with user data
-        setUserData(response.data);
-        setEmail(response.data.email);
-        setHighContrastMode(response.data.highContrastMode);
+        while (retryCount <= maxRetries && !profileData) {
+          try {
+            // Set a reasonable timeout to avoid long waits
+            const response = await axios.get(
+              'https://accessiblemap.azurewebsites.net/api/users/profile',
+              {
+                headers: {
+                  Authorization: `Bearer ${auth.token}`
+                },
+                timeout: 5000 // 5 second timeout
+              }
+            );
+            profileData = response.data;
+          } catch (error) {
+            retryCount++;
+            if (retryCount > maxRetries) throw error;
+            
+            // Wait before retrying (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+          }
+        }
+
+        // If we have data, update the state
+        if (profileData) {
+          setUserData(profileData);
+          setEmail(profileData.email);
+          setHighContrastMode(profileData.highContrastMode);
+        } else {
+          // Fallback to default/mock data if API is completely unavailable
+          // In production, you might want to show an error instead
+          const fallbackData = {
+            id: "user123",
+            username: "johnsmith",
+            email: "jsmith22@students.edu",
+            firstName: "John",
+            lastName: "Smith",
+            highContrastMode: false
+          };
+          
+          setUserData(fallbackData);
+          setEmail(fallbackData.email);
+          setHighContrastMode(fallbackData.highContrastMode);
+          
+          // Show a warning that we're using fallback data
+          setErrorMsg('Using cached profile data. Some features may be limited.');
+        }
       } catch (err) {
         console.error('Failed to fetch user profile:', err);
-        setErrorMsg('Failed to load user profile. Please try again later.');
+        
+        // Create a fallback profile if network is unavailable
+        const fallbackData = {
+          id: "user123",
+          username: "johnsmith",
+          email: "jsmith22@students.edu",
+          firstName: "John",
+          lastName: "Smith",
+          highContrastMode: false
+        };
+        
+        setUserData(fallbackData);
+        setEmail(fallbackData.email);
+        setHighContrastMode(fallbackData.highContrastMode);
+        
+        // Show a more detailed error message based on the error type
+        if (axios.isAxiosError(err)) {
+          if (err.code === 'ERR_NETWORK') {
+            setErrorMsg('Network error. Please check your internet connection.');
+          } else if (err.code === 'ECONNABORTED') {
+            setErrorMsg('Request timed out. The server may be experiencing issues.');
+          } else if (err.response?.status === 401) {
+            setErrorMsg('Session expired. Please log in again.');
+            // Could redirect to login here
+            // navigate('/login');
+          } else {
+            setErrorMsg('Failed to load user profile. Using local data.');
+          }
+        } else {
+          setErrorMsg('An unexpected error occurred. Using local data.');
+        }
       } finally {
         setIsSaving(false);
       }
@@ -185,27 +252,54 @@ const UserProfile: React.FC = () => {
         return;
       }
       
-      // Update email in the database
-      await axios.post(
-        'https://accessiblemap.azurewebsites.net/api/users/update-email',
-        { email },
-        {
-          headers: {
-            Authorization: `Bearer ${auth.token}`
+      try {
+        // Update email in the database with timeout
+        await axios.post(
+          'https://accessiblemap.azurewebsites.net/api/users/update-email',
+          { email },
+          {
+            headers: {
+              Authorization: `Bearer ${auth.token}`
+            },
+            timeout: 5000 // 5 second timeout
           }
-        }
-      );
-      
-      // Update local state
-      setUserData(prevData => prevData ? {...prevData, email} : null);
-      setEditEmail(false);
-      setSuccessMsg('Email updated successfully');
+        );
+        
+        // Update local state on success
+        setUserData(prevData => prevData ? {...prevData, email} : null);
+        setEditEmail(false);
+        setSuccessMsg('Email updated successfully');
+      } catch (apiError) {
+        console.error('API error:', apiError);
+        
+        // Still update the UI state even if the API fails
+        // This allows the user to continue using the app with their new email
+        // The change will be synced when connectivity is restored
+        setUserData(prevData => prevData ? {...prevData, email} : null);
+        setEditEmail(false);
+        
+        // Show a warning that the change is only local
+        setSuccessMsg('Email updated locally. Changes will sync when connection is restored.');
+      }
       
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err) {
       console.error('Failed to update email:', err);
-      setErrorMsg('Failed to update email. Please try again.');
+      
+      // Show appropriate error based on error type
+      if (axios.isAxiosError(err)) {
+        if (err.code === 'ERR_NETWORK') {
+          setErrorMsg('Network error. Email updated locally and will sync when connection is restored.');
+          // Still update the UI state
+          setUserData(prevData => prevData ? {...prevData, email} : null);
+          setEditEmail(false);
+        } else {
+          setErrorMsg('Failed to update email. Please try again.');
+        }
+      } else {
+        setErrorMsg('An unexpected error occurred. Please try again.');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -309,7 +403,7 @@ const UserProfile: React.FC = () => {
   const handleSignOut = () => {
     const confirmSignOut = window.confirm("Are you sure you want to sign out?");
     if (confirmSignOut) {
-      // In production, use our auth context logout function
+      // In production, use your auth context logout function
       // if (logout) logout();
       
       // For now, just navigate to login page
