@@ -568,14 +568,15 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
             </div>
           </div>
           <div className="icon-bar">
-            <a href="#" className="icon-container" onClick={() => placeMarkers(!showWheelchairIcons)} >
-              <img className='icon' src={wheelchairIcon} />
+            <a href="#" className="icon-container" onClick={() => placeMarkers(!showWheelchairIcons)} 
+              aria-label="Toggle accessible routing">
+              <img className='icon' src={wheelchairIcon} alt="Accessible entrances"/>
             </a>
-            <a href="#" className="icon-container">
-              <img className='icon' src={volumeIcon} />
+            <a href="#" className="icon-container" aria-label="Enable audio directions">
+              <img className='icon' src={volumeIcon} alt="Audio directions"/>
             </a>
-            <a href="#" className="icon-container">
-              <img className='icon' src={contrastIcon} />
+            <a href="#" className="icon-container" aria-label="Toggle high contrast mode">
+              <img className='icon' src={contrastIcon} alt="High-contrast mode"/>
             </a>
           </div>
         </div>
