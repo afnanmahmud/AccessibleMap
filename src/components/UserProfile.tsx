@@ -168,7 +168,7 @@ const UserProfile: React.FC = () => {
         try {
           // Set a reasonable timeout to avoid long waits
           const response = await axios.get(
-            'https://accessiblemap.azurewebsites.net/api/users/profile',
+            'https://https://accessiblemap-gnddadh9ghbgc9e8.eastus-01.azurewebsites.net/api/users/profile',
             {
               headers: {
                 Authorization: `Bearer ${auth.token}`
@@ -260,7 +260,7 @@ const UserProfile: React.FC = () => {
       try {
         // Update email in the database with timeout
         await axios.post(
-          'https://accessiblemap.azurewebsites.net/api/users/update-email',
+          'https://accessiblemap-gnddadh9ghbgc9e8.eastus-01.azurewebsites.net/api/users/update-email',
           { email },
           {
             headers: {
@@ -355,7 +355,7 @@ const UserProfile: React.FC = () => {
       
       // Update password in the database
       await axios.post(
-        'https://accessiblemap.azurewebsites.net/api/users/update-password',
+        'https://accessiblemap-gnddadh9ghbgc9e8.eastus-01.azurewebsites.net/api/users/update-password',
         { 
           currentPassword: password,
           newPassword 
@@ -470,7 +470,7 @@ const UserProfile: React.FC = () => {
       }
       
       await axios.post(
-        'https://accessiblemap.azurewebsites.net/api/users/update-preferences',
+        'https://accessiblemap-gnddadh9ghbgc9e8.eastus-01.azurewebsites.net/api/users/update-preferences',
         {
           highContrastMode: newHighContrastMode
         },
