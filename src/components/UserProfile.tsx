@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-// we could import your AuthContext here
+// we could import our AuthContext here
 // import { AuthContext } from '../context/AuthContext';
 
 // MenuIcon
@@ -108,7 +108,7 @@ const UserProfile: React.FC = () => {
     // return { token: token, userId: user?.id };
     
     // For now, we'll use a hardcoded token for demonstration
-    // IMPORTANT: Replace this with your actual authentication solution
+    // IMPORTANT: Replace this with our actual authentication solution
     return { 
       token: 'dummy-token', 
       userId: 'current-user-id' 
@@ -309,7 +309,7 @@ const UserProfile: React.FC = () => {
   const handleSignOut = () => {
     const confirmSignOut = window.confirm("Are you sure you want to sign out?");
     if (confirmSignOut) {
-      // In production, use your auth context logout function
+      // In production, use our auth context logout function
       // if (logout) logout();
       
       // For now, just navigate to login page
