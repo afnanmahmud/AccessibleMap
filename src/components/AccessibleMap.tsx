@@ -21,6 +21,7 @@ import { Coordinate } from 'ol/coordinate';
 import wheelchairIcon from "./../assets/wheelchair-icon.png";
 import volumeIcon from "./../assets/volume-icon.png";
 import contrastIcon from "./../assets/high-contrast-icon.png";
+import bookmarkIcon from "./../assets/bookmark-icon.png";
 
 // OpenRouteService API
 const orsDirections = new Openrouteservice.Directions({
@@ -50,7 +51,11 @@ interface RouteOption {
   distance: number; // in meters
   duration: number; // in seconds
   coordinates: number[][];
+  startLocation?: string; // Added for bookmarking
+  endLocation?: string;   // Added for bookmarking
+  routeMode?: string;     // Added for bookmarking
 }
+
 const INITIAL_CENTER = fromLonLat([-84.5831, 34.0390]);
 
 // Load campus locations from JSON file
@@ -74,49 +79,47 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
   const [showWheelchairIcons, setShowWheelchairIcons] = useState(true);
-
-  // New state for step-by-step navigation
   const [currentDirectionIndex, setCurrentDirectionIndex] = useState(0);
   const [stepByStepMode, setStepByStepMode] = useState(false);
-  
-  // New state to track if a route is active
   const [isRouteActive, setIsRouteActive] = useState(false);
 
+  // New states for bookmark functionality
+  const [bookmarkedRoutes, setBookmarkedRoutes] = useState<RouteOption[]>([]);
+  const [isBookmarkFlyoutOpen, setIsBookmarkFlyoutOpen] = useState(false);
+
   // Place accessibility markers on the map
-const placeMarkers = useCallback((showIcons: boolean) => {
-  const features = vectorSourceRef.current.getFeatures();
-  features.forEach(feature => {
-    // Remove only accessibility markers, not user location or route markers
-    if (feature.get('type') === 'accessibility-marker') {
-      vectorSourceRef.current.removeFeature(feature);
+  const placeMarkers = useCallback((showIcons: boolean) => {
+    const features = vectorSourceRef.current.getFeatures();
+    features.forEach(feature => {
+      if (feature.get('type') === 'accessibility-marker') {
+        vectorSourceRef.current.removeFeature(feature);
+      }
+    });
+    
+    if (!showIcons) {
+      setShowWheelchairIcons(false);
+      return;
     }
-  });
-  
-  if (!showIcons) {
-    setShowWheelchairIcons(false);
-    return;
-  }
-  
-  campusLocations.forEach((location) => {
-    const coords = fromLonLat(location.coordinates);
-    const marker = new Feature(new Point(coords));
+    
+    campusLocations.forEach((location) => {
+      const coords = fromLonLat(location.coordinates);
+      const marker = new Feature(new Point(coords));
 
-    // Identify accessibility markers
-    marker.set('type', 'accessibility-marker');
+      marker.set('type', 'accessibility-marker');
 
-    marker.setStyle(
-      new Style({
-        image: new Icon({
-          src: 'https://cdn2.iconfinder.com/data/icons/wsd-map-markers-2/512/wsd_markers_97-512.png',
-          scale: 0.04,
-          anchor: [0.5, 1],
-        }),
-      })
-    );
-    vectorSourceRef.current.addFeature(marker);
-  });
-  setShowWheelchairIcons(true);
-}, []);
+      marker.setStyle(
+        new Style({
+          image: new Icon({
+            src: 'https://cdn2.iconfinder.com/data/icons/wsd-map-markers-2/512/wsd_markers_97-512.png',
+            scale: 0.04,
+            anchor: [0.5, 1],
+          }),
+        })
+      );
+      vectorSourceRef.current.addFeature(marker);
+    });
+    setShowWheelchairIcons(true);
+  }, []);
 
   // Start tracking user location
   const startTracking = useCallback(() => {
@@ -133,7 +136,6 @@ const placeMarkers = useCallback((showIcons: boolean) => {
         
         const coords = fromLonLat(lonLat);
   
-        // Update marker position
         userMarkerRef.current.setGeometry(new Point(coords));
 
         if (!vectorSourceRef.current.hasFeature(userMarkerRef.current)) {
@@ -148,7 +150,6 @@ const placeMarkers = useCallback((showIcons: boolean) => {
           vectorSourceRef.current.addFeature(userMarkerRef.current);
         }
   
-        // Follow user location
         if (mapInstance.current) {
           mapInstance.current.getView().setCenter(coords);
         }
@@ -249,7 +250,6 @@ const placeMarkers = useCallback((showIcons: boolean) => {
   const clearRoutes = useCallback(() => {
     const features = vectorSourceRef.current.getFeatures();
     features.forEach(feature => {
-      // Remove only route lines and previous start/end markers
       if (feature.getGeometry() instanceof LineString || feature.get('type') === 'marker') {
         vectorSourceRef.current.removeFeature(feature);
       }
@@ -273,10 +273,8 @@ const placeMarkers = useCallback((showIcons: boolean) => {
     const timer = setTimeout(() => {
       let startCoords;
       if (startLocation) {
-        // If user entered a start location, use that
         startCoords = findLocationByName(startLocation);
       } else if (userLocation) {
-        // If no start location entered, use current user location
         startCoords = userLocation;
       } else {
         return;
@@ -290,7 +288,6 @@ const placeMarkers = useCallback((showIcons: boolean) => {
         return;
       }
 
-      // Calculate routes
       orsDirections
         .calculate({
           coordinates: [startCoords, endCoords],
@@ -306,21 +303,39 @@ const placeMarkers = useCallback((showIcons: boolean) => {
             distance: feature.properties.summary.distance,
             duration: feature.properties.summary.duration,
             coordinates: feature.geometry.coordinates,
-            steps: feature.properties.segments[0].steps
+            steps: feature.properties.segments[0].steps,
+            startLocation: startLocation || 'My Location',
+            endLocation: endLocation,
+            routeMode: routeMode
           }));
           setRouteOptions(routes);
           setIsFlyoutOpen(true);
-          setSelectedRouteId(0); // Default to first route
+          setSelectedRouteId(0);
         })
         .catch((err: Error) => {
           console.error('Route calculation error:', err);
           setIsFlyoutOpen(false);
           setRouteOptions([]);
         });
-    }, 500); // 500ms debounce
+    }, 500);
 
     return () => clearTimeout(timer);
   }, [startLocation, endLocation, routeMode, findLocationByName, userLocation]);
+
+  // Toggle bookmark flyout
+  const toggleBookmarkFlyout = () => {
+    setIsBookmarkFlyoutOpen(!isBookmarkFlyoutOpen);
+  };
+
+  // Handle bookmark click for a route
+  const handleBookmarkClick = (route: RouteOption) => {
+    const isBookmarked = bookmarkedRoutes.some(r => r.id === route.id);
+    if (isBookmarked) {
+      setBookmarkedRoutes(bookmarkedRoutes.filter(r => r.id !== route.id));
+    } else {
+      setBookmarkedRoutes([...bookmarkedRoutes, route]);
+    }
+  };
 
   // Calculate and display the selected route
   const calculateRoute = useCallback(() => {
@@ -350,11 +365,9 @@ const placeMarkers = useCallback((showIcons: boolean) => {
       return;
     }
   
-    // Convert coordinates to OpenLayers format
     const startPoint = fromLonLat(startCoords);
     const endPoint = fromLonLat(endCoords);
   
-    // Create start marker (blue)
     const startMarker = new Feature(new Point(startPoint));
     startMarker.setStyle(
       new Style({
@@ -367,7 +380,6 @@ const placeMarkers = useCallback((showIcons: boolean) => {
     );
     startMarker.set('type', 'marker');
   
-    // Create end marker (red)
     const endMarker = new Feature(new Point(endPoint));
     endMarker.setStyle(
       new Style({
@@ -380,11 +392,9 @@ const placeMarkers = useCallback((showIcons: boolean) => {
     );
     endMarker.set('type', 'marker');
   
-    // Add markers to the vector source
     vectorSourceRef.current.addFeature(startMarker);
     vectorSourceRef.current.addFeature(endMarker);
   
-    // Zoom to fit both markers
     if (mapInstance.current) {
       const extent = [
         Math.min(startPoint[0], endPoint[0]), 
@@ -400,7 +410,6 @@ const placeMarkers = useCallback((showIcons: boolean) => {
       });
     }
   
-    // Display the selected route
     const selectedRoute = routeOptions.find((route) => route.id === selectedRouteId);
     if (selectedRoute) {
       const routeFeature = new Feature({
@@ -421,7 +430,6 @@ const placeMarkers = useCallback((showIcons: boolean) => {
   
       vectorSourceRef.current.addFeature(routeFeature);
   
-      // Set turn-by-turn directions
       if (selectedRoute.steps) {
         const directions: TurnByTurnDirection[] = selectedRoute.steps.map((step: any) => ({
           type: step.type,
@@ -435,23 +443,15 @@ const placeMarkers = useCallback((showIcons: boolean) => {
       }
     }
     
-    // Set route as active
     setIsRouteActive(true);
-    
-    // Close the flyout
     setIsFlyoutOpen(false);
   }, [startLocation, endLocation, selectedRouteId, routeOptions, clearRoutes, findLocationByName, userLocation, routeMode]);
 
-  // Handle arrived at destination (new function)
   const handleArrived = useCallback(() => {
-    // Show a congratulatory message
     alert('You have arrived at your destination.');
-    
-    // Clear the route
     clearRoutes();
   }, [clearRoutes]);
 
-  // Handle changing locations
   const handleStartLocationChange = useCallback((value: string) => {
     setStartLocation(value);
   }, []);
@@ -460,7 +460,6 @@ const placeMarkers = useCallback((showIcons: boolean) => {
     setEndLocation(value);
   }, []);
 
-  // Navigation functions for step-by-step directions
   const nextDirection = useCallback(() => {
     if (currentDirectionIndex < turnByTurnDirections.length - 1) {
       setCurrentDirectionIndex(currentDirectionIndex + 1);
@@ -473,17 +472,13 @@ const placeMarkers = useCallback((showIcons: boolean) => {
     }
   }, [currentDirectionIndex]);
 
-  // Toggle between list view and step-by-step view
   const toggleDirectionMode = useCallback(() => {
     setStepByStepMode(!stepByStepMode);
   }, [stepByStepMode]);
 
-  // Add these functions to your component
   const previewRoute = useCallback((route: { coordinates: Coordinate[]; }) => {
-    // Clear any existing preview
     clearPreviewRoute();
 
-    // Create a preview line with a distinct style
     const routeFeature = new Feature({
       geometry: new LineString(
         route.coordinates.map((coord: Coordinate) => fromLonLat(coord))
@@ -493,14 +488,13 @@ const placeMarkers = useCallback((showIcons: boolean) => {
     routeFeature.setStyle(
       new Style({
         stroke: new Stroke({
-          color: 'rgba(37, 99, 235, 0.5)', // Semi-transparent blue
+          color: 'rgba(37, 99, 235, 0.5)',
           width: 4,
         }),
       })
     );
     routeFeature.set('type', 'preview');
     
-    // Add to map
     vectorSourceRef.current.addFeature(routeFeature);
   }, []);
 
@@ -532,26 +526,75 @@ const placeMarkers = useCallback((showIcons: boolean) => {
           {isFlyoutOpen && (
             <div className="route-flyout">
               <h2>Route Options</h2>
-
-              {routeOptions.map((route) => (
-
-                <div
-                  key={route.id}
-                  className={`route-option ${selectedRouteId === route.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedRouteId(route.id)}
-                  onMouseEnter={() => previewRoute(route)}
-                  onMouseLeave={() => clearPreviewRoute()}
-                >
-                  <h3>{route.summary}</h3>
-                  <p>Distance: {(route.distance / 1000).toFixed(2)} km</p>
-                  <p>Duration: {Math.round(route.duration / 60)} minutes</p>
-                </div>
-
-              ))}
+              {routeOptions.map((route) => {
+                const isBookmarked = bookmarkedRoutes.some(r => r.id === route.id);
+                return (
+                  <div
+                    key={route.id}
+                    className={`route-option ${selectedRouteId === route.id ? 'selected' : ''}`}
+                    onClick={() => setSelectedRouteId(route.id)}
+                    onMouseEnter={() => previewRoute(route)}
+                    onMouseLeave={() => clearPreviewRoute()}
+                  >
+                    <div className="route-header">
+                      <h3>
+                        <span className="walking-icon">🚶</span>
+                        {startLocation || 'My Location'} to {endLocation}
+                      </h3>
+                      <button
+                        className={`bookmark-button ${isBookmarked ? 'bookmarked' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent route selection when clicking bookmark
+                          handleBookmarkClick(route);
+                        }}
+                        aria-label={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
+                      >
+                        <img
+                          src={bookmarkIcon}
+                          alt="Bookmark"
+                          className="bookmark-icon"
+                        />
+                      </button>
+                    </div>
+                    <p>Distance: {(route.distance / 1000).toFixed(2)} km</p>
+                    <p>Duration: {Math.round(route.duration / 60)} minutes</p>
+                  </div>
+                );
+              })}
             </div>
           )}
 
-          <div className={`map-root ${className || ''} ${isFlyoutOpen ? 'shifted' : ''}`}>
+          {isBookmarkFlyoutOpen && (
+            <div className="bookmark-flyout">
+              <h2>Saved Routes</h2>
+              {bookmarkedRoutes.length === 0 ? (
+                <p>No bookmarked routes yet.</p>
+              ) : (
+                bookmarkedRoutes.map((route) => (
+                  <div
+                    key={route.id}
+                    className="bookmark-option"
+                    onClick={() => {
+                      setStartLocation(route.startLocation || '');
+                      setEndLocation(route.endLocation || '');
+                      setRouteMode(route.routeMode || 'wheelchair');
+                      setIsBookmarkFlyoutOpen(false);
+                    }}
+                  >
+                    <h3>
+                      <span className="walking-icon">🚶</span>
+                      {route.startLocation} to {route.endLocation}
+                    </h3>
+                    <p>Distance: {(route.distance / 1000).toFixed(2)} km</p>
+                    <p>Duration: {Math.round(route.duration / 60)} minutes</p>
+                    <p>Mode: {route.routeMode}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          <div className={`map-root ${className || ''} ${isFlyoutOpen ? 'shifted' : ''} ${isBookmarkFlyoutOpen ? 'bookmark-shifted' : ''}`}>
             <div 
               ref={mapRef} 
               className="map-container" 
@@ -582,16 +625,19 @@ const placeMarkers = useCallback((showIcons: boolean) => {
             <a href="#" className="icon-container" aria-label="Toggle high contrast mode">
               <img className='icon' src={contrastIcon} alt="High-contrast mode"/>
             </a>
+            <a href="#" className="icon-container" 
+              onClick={toggleBookmarkFlyout}
+              aria-label="Toggle bookmarked routes">
+              <img className='icon' src={bookmarkIcon} alt="Bookmarks"/>
+            </a>
           </div>
         </div>
 
-        {/* Turn-by-Turn Directions Display */}
         {turnByTurnDirections.length > 0 && (
           <div className="turn-by-turn-directions">
             <div className="directions-header">
               <h3>Directions</h3>
               <div className="directions-controls">
-                {/* Added Cancel Route button in the directions header */}
                 {isRouteActive && (
                 <button
                   type="button"
