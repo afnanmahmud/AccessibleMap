@@ -7,11 +7,11 @@ interface Location {
   coordinates: [number, number];
 }
 
-interface MapSearchProps {
+export interface MapSearchProps { // Added export
   onStartChange: (value: string) => void;
   onEndChange: (value: string) => void;
   onSubmit: () => void;
-  onBookmarkToggle: () => void; // Added
+  onBookmarkToggle: () => void;
   locations: Location[];
 }
 
