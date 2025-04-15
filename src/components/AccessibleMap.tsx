@@ -73,7 +73,7 @@ const AccessibleMap: React.FC<AccessibleMapProps> = ({ className }) => {
   const [endLocation, setEndLocation] = useState('');
   const [routeMode, setRouteMode] = useState<'wheelchair' | 'walking'>('wheelchair');
   const [userLocation, setUserLocation] = useState<number[] | null>(null);
-  const [turnByTurnDirections, setTurnByTurnDirections] = useState<TurnByTurnDirection[]>([]);
+  const [turnByTurnDirections, setTurnByDone
   const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);
   const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
