@@ -53,7 +53,7 @@ interface RouteOption {
   coordinates: number[][];
   startLocation?: string; // Added for bookmarking
   endLocation?: string;   // Added for bookmarking
-  routeMode?: string;     // Added for bookmarking
+  routeMode?: 'wheelchair' | 'walking'; // Added for bookmarking
 }
 
 const INITIAL_CENTER = fromLonLat([-84.5831, 34.0390]);
